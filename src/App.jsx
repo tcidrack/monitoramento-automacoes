@@ -3,6 +3,7 @@ import "./App.css";
 import Regulacoes from "./tabs/Regulacoes";
 import ExecucoesRMTC from "./tabs/ExecucoesRMTC";
 import AprovadorItens from "./tabs/AprovadorItens";
+import ExecucoesTaxasOftalmo from "./tabs/ExecucoesTaxasOftalmo";
 
 function Loader({ cor }) {
   return (
@@ -27,6 +28,7 @@ const ABAS = [
   { id: "regulacoes",   label: "Regulações",        icon: "assignment" },
   { id: "rmtc",         label: "Deflator RM/TC",   icon: "percent_discount" },
   { id: "aprovador",    label: "Aprovador de Itens", icon: "check_circle" },
+  { id: "taxasOftalmo", label: "Taxas Oftalmo",    icon: "visibility" },
 ];
 
 export default function App() {
@@ -52,6 +54,7 @@ export default function App() {
     regulacoes: <Regulacoes tema={tema} cores={coresAtivas} />,
     rmtc:       <ExecucoesRMTC tema={tema} cores={coresAtivas} />,
     aprovador:  <AprovadorItens tema={tema} cores={coresAtivas} />,
+    taxasOftalmo: <ExecucoesTaxasOftalmo tema={tema} cores={coresAtivas} />,
   }[abaAtiva];
 
   return (

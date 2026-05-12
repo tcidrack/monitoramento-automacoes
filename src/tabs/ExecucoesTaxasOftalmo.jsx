@@ -4,6 +4,15 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recha
 import { supabase } from "../lib/supabase";
 import { usePollingFetch } from "../hooks/usePollingFetch";
 
+const TAXA_LABELS = {
+  "60026200": "Campimetria",
+  "60027886": "Retinografia",
+  "60027525": "Paquimetria",
+  "70040150": "Biometria",
+  "60027436": "Microscopia Especular",
+  "90262610": "Angiofluoresceinografia Monocular",
+};
+
 function formatarDataHora(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -21,21 +30,18 @@ function getDataOnly(iso) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-export default function ExecucoesRMTC({ tema, cores }) {
+export default function ExecucoesTaxasOftalmo({ tema, cores }) {
   const [busca, setBusca] = useState("");
-  const [filtroTipo, setFiltroTipo] = useState("Todos");
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
   const ITENS_POR_PAGINA = 20;
   const [pagina, setPagina] = useState(1);
 
   const accentColor = tema === "escuro" ? "#FFCB05" : "#FF0073";
-  const COLOR_RM = tema === "escuro" ? "#60a5fa" : "#1d4ed8";
-  const COLOR_TC = tema === "escuro" ? "#f87171" : "#dc2626";
 
   const fetchExecucoes = useCallback(async () => {
     const { data, error } = await supabase
-      .from("execucoes_rmtc")
+      .from("execucoes_taxas_oftalmo")
       .select("*")
       .order("data_execucao", { ascending: false });
     if (!error) return data || [];
@@ -61,21 +67,31 @@ export default function ExecucoesRMTC({ tema, cores }) {
   }
 
   let filtrados = filtrarPorPeriodo(dados);
-  if (filtroTipo !== "Todos") filtrados = filtrados.filter((r) => r.tipo === filtroTipo);
   if (busca.trim()) {
     filtrados = filtrados.filter((r) =>
       (r.numero_processo || "").toLowerCase().includes(busca.trim().toLowerCase())
     );
   }
 
-  const totalRM = dados.filter((r) => r.tipo === "RM").length;
-  const totalTC = dados.filter((r) => r.tipo === "TC").length;
-  const totalGuias = filtrados.reduce((acc, r) => acc + (r.quantidade_guias || 0), 0);
+  const totalProcessos = dados?.length || 0;
+  const totalGuias = filtrados.reduce((acc, r) => acc + (r.qtd_guias || 0), 0);
+  const totalTaxas = filtrados.reduce((acc, r) => acc + (r.qtd_taxas || 0), 0);
+  const totalProcedimento9026 = filtrados.reduce((acc, r) => acc + (r.qtd_regra_90262610 || 0), 0);
 
-  const chartData = [
-    { nome: "RM", valor: dados.filter((r) => r.tipo === "RM").length },
-    { nome: "TC", valor: dados.filter((r) => r.tipo === "TC").length },
-  ];
+  const taxCount = {};
+  dados.forEach((r) => {
+    Object.entries(r.codigos_taxas || {}).forEach(([codigo, qtd]) => {
+      taxCount[codigo] = (taxCount[codigo] || 0) + qtd;
+    });
+  });
+  const chartData = Object.entries(taxCount)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([codigo, valor]) => {
+      const nome = TAXA_LABELS[codigo];
+      const rotulo = nome ? `${codigo} - ${nome}` : codigo;
+      return { nome: rotulo.length > 45 ? rotulo.slice(0, 45) + "…" : rotulo, valor };
+    });
 
   const totalPaginas = Math.ceil(filtrados.length / ITENS_POR_PAGINA);
   const paginaSegura = Math.min(Math.max(1, pagina), Math.max(1, totalPaginas));
@@ -98,25 +114,28 @@ export default function ExecucoesRMTC({ tema, cores }) {
     setPagina(Math.min(Math.max(1, p), totalPaginas));
   }
 
-  useEffect(() => { setPagina(1); }, [busca, filtroTipo, dataInicio, dataFim]);
+  useEffect(() => { setPagina(1); }, [busca, dataInicio, dataFim]);
 
   function exportarExcel() {
     const ws = XLSX.utils.aoa_to_sheet([
-      ["", "", "", "Total RM", totalRM],
-      ["", "", "", "Total TC", totalTC],
+      ["", "", "", "Total de processos", totalProcessos],
       ["", "", "", "Total de guias (filtrado)", totalGuias],
+      ["", "", "", "Total de taxas (filtrado)", totalTaxas],
+      ["", "", "", "Total do Procedimento 90262610 ANGIOFLUORESCEINOGRAFIA", totalProcedimento9026],
       [],
-      ["Nº do Processo", "Tipo", "Qtd. Guias", "Data de Execução"],
+      ["Nº do Processo", "Qtd. Guias", "Qtd. Taxas", "Códigos de Taxa", "Procedimento 90262610 ANGIOFLUORESCEINOGRAFIA", "Data de Execução"],
       ...filtrados.map((r) => [
         r.numero_processo,
-        r.tipo,
-        r.quantidade_guias,
+        r.qtd_guias,
+        r.qtd_taxas,
+        Object.keys(r.codigos_taxas || {}).length,
+        r.qtd_regra_90262610 ?? 0,
         formatarDataHora(r.data_execucao),
       ]),
     ]);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Execuções RM-TC");
-    XLSX.writeFile(wb, "execucoes_rmtc.xlsx");
+    XLSX.utils.book_append_sheet(wb, ws, "Taxas Oftalmo");
+    XLSX.writeFile(wb, "execucoes_taxas_oftalmo.xlsx");
   }
 
   return (
@@ -124,34 +143,42 @@ export default function ExecucoesRMTC({ tema, cores }) {
       {/* CARDS */}
       <div className="cards">
         <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
-          <h3>Total de Processos RM</h3>
-          <p style={{ color: COLOR_RM }}>{totalRM.toLocaleString("pt-BR")}</p>
-        </div>
-        <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
-          <h3>Total de Processos TC</h3>
-          <p style={{ color: COLOR_TC }}>{totalTC.toLocaleString("pt-BR")}</p>
+          <h3>Total de Processos</h3>
+          <p>{totalProcessos.toLocaleString("pt-BR")}</p>
         </div>
         <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
           <h3>Total de Guias</h3>
           <p>{totalGuias.toLocaleString("pt-BR")}</p>
           <p style={{ fontSize: 13, fontWeight: 400 }}>nos registros filtrados</p>
         </div>
+        <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
+          <h3>Total de Taxas</h3>
+          <p>{totalTaxas.toLocaleString("pt-BR")}</p>
+          <p style={{ fontSize: 13, fontWeight: 400 }}>nos registros filtrados</p>
+        </div>
+        <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
+          <h3>Procedimento ANGIOFLUORESCEINOGRAFIA</h3>
+          <p>{totalProcedimento9026.toLocaleString("pt-BR")}</p>
+          <p style={{ fontSize: 13, fontWeight: 400 }}>nos registros filtrados</p>
+        </div>
       </div>
 
       {/* GRÁFICO */}
-      <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
-        <h3>Distribuição RM vs TC</h3>
-        <div style={{ width: "100%", height: 220 }}>
-          <ResponsiveContainer>
-            <BarChart data={chartData}>
-              <XAxis dataKey="nome" stroke={cores.texto} tick={{ fontSize: 13 }} />
-              <YAxis stroke={cores.texto} tick={{ fontSize: 12 }} allowDecimals={false} />
-              <Tooltip contentStyle={{ fontSize: 12 }} />
-              <Bar dataKey="valor" fill={accentColor} name="Processos" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+      {chartData.length > 0 && (
+        <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
+          <h3>Top Códigos de Taxa Mais Frequentes</h3>
+          <div style={{ width: "100%", height: 250 }}>
+            <ResponsiveContainer>
+              <BarChart data={chartData} layout="vertical">
+                <XAxis type="number" stroke={cores.texto} tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="nome" width={300} stroke={cores.texto} tick={{ fontSize: 11 }} />
+                <Tooltip contentStyle={{ fontSize: 12 }} />
+                <Bar dataKey="valor" fill={accentColor} name="Ocorrências" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* FILTROS */}
       <div className="filtro">
@@ -164,17 +191,13 @@ export default function ExecucoesRMTC({ tema, cores }) {
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
           />
-          <label>Tipo:</label>
-          <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}>
-            {["Todos", "RM", "TC"].map((t) => <option key={t}>{t}</option>)}
-          </select>
           <label>Período:</label>
           <input className="filtro-data" type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
           <span className="ate-text">até</span>
           <input className="filtro-data" type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
           <button
             className="btn-tema"
-            onClick={() => { setBusca(""); setFiltroTipo("Todos"); setDataInicio(""); setDataFim(""); }}
+            onClick={() => { setBusca(""); setDataInicio(""); setDataFim(""); }}
           >
             <span className="material-symbols-outlined">mop</span>
             Limpar Filtros
@@ -195,23 +218,25 @@ export default function ExecucoesRMTC({ tema, cores }) {
             <thead>
               <tr>
                 <th style={{ color: cores.texto }}>Nº do Processo</th>
-                <th style={{ color: cores.texto }}>Tipo</th>
-                <th style={{ color: cores.texto }}>Qtd. de Guias</th>
+                <th style={{ color: cores.texto }}>Qtd. Guias</th>
+                <th style={{ color: cores.texto }}>Qtd. Taxas</th>
+                <th style={{ color: cores.texto }}>Códigos de Taxa</th>
+                <th style={{ color: cores.texto }}>Procedimento ANGIOFLUORESCEINOGRAFIA</th>
                 <th style={{ color: cores.texto }}>Data de Execução</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={4} style={{ color: cores.texto, padding: 32 }}>Carregando...</td></tr>
+                <tr><td colSpan={6} style={{ color: cores.texto, padding: 32 }}>Carregando...</td></tr>
               ) : filtrados.length === 0 ? (
-                <tr><td colSpan={4} style={{ color: cores.texto, padding: 32 }}>Nenhum registro encontrado.</td></tr>
+                <tr><td colSpan={6} style={{ color: cores.texto, padding: 32 }}>Nenhum registro encontrado.</td></tr>
               ) : paginaDados.map((r, i) => (
                 <tr key={i}>
                   <td style={{ color: cores.texto }}>{r.numero_processo}</td>
-                  <td style={{ color: cores.texto }}>
-                    <span className={r.tipo === "RM" ? "badge-rm" : "badge-tc"}>{r.tipo}</span>
-                  </td>
-                  <td style={{ color: cores.texto }}>{r.quantidade_guias}</td>
+                  <td style={{ color: cores.texto }}>{r.qtd_guias}</td>
+                  <td style={{ color: cores.texto }}>{r.qtd_taxas}</td>
+                  <td style={{ color: cores.texto }}>{Object.keys(r.codigos_taxas || {}).length}</td>
+                  <td style={{ color: cores.texto }}>{r.qtd_regra_90262610 ?? 0}</td>
                   <td style={{ color: cores.texto }}>{formatarDataHora(r.data_execucao)}</td>
                 </tr>
               ))}
