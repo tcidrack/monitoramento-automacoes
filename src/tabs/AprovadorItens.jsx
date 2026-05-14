@@ -67,10 +67,8 @@ const [buscaLote, setBuscaLote] = useState("");
   const clientesUnicos = [...new Set(dados.map((r) => r.cliente).filter(Boolean))];
 
   let filtrados = filtrarPorPeriodo(dados);
-  if (buscaPrestador.trim()) {
-    filtrados = filtrados.filter((r) =>
-      (r.prestador || "").toLowerCase().includes(buscaPrestador.trim().toLowerCase())
-    );
+  if (buscaPrestador) {
+    filtrados = filtrados.filter((r) => r.prestador === buscaPrestador);
   }
   if (buscaCliente) {
     filtrados = filtrados.filter((r) => r.cliente === buscaCliente);
