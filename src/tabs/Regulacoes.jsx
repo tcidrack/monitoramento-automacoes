@@ -9,6 +9,9 @@ const PROC_LABELS = {
   "40202038": "BIÓPSIA DA ENDOSCOPIA",
   "40307840": "TESTE RÁPIDO PARA HELICOBACTERPYLORI",
   "90230006": "COLONOSCOPIA",
+  "23020148": "BIOPSIA OU CITOLOGIA",
+  "40103170": "EEG DE ROTINA",
+  "10101012": "CONSULTA ELETIVA",
 };
 
 function formatarDataHora(iso) {
@@ -32,6 +35,7 @@ export default function Regulacoes({ tema, cores }) {
   const [busca, setBusca] = useState("");
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
+  const [regraFiltro, setRegraFiltro] = useState("");
   const ITENS_POR_PAGINA = 20;
   const [pagina, setPagina] = useState(1);
 
@@ -64,11 +68,16 @@ export default function Regulacoes({ tema, cores }) {
     });
   }
 
+  const regrasUnicas = [...new Set(dados.map((r) => r.regra_aplicada).filter(Boolean))].sort();
+
   let filtrados = filtrarPorPeriodo(dados);
   if (busca.trim()) {
     filtrados = filtrados.filter((r) =>
       (r.numero_guia || "").toLowerCase().includes(busca.trim().toLowerCase())
     );
+  }
+  if (regraFiltro) {
+    filtrados = filtrados.filter((r) => r.regra_aplicada === regraFiltro);
   }
 
   const totalGuias = filtrados.length;
@@ -112,7 +121,7 @@ export default function Regulacoes({ tema, cores }) {
     setPagina(Math.min(Math.max(1, p), totalPaginas));
   }
 
-  useEffect(() => { setPagina(1); }, [busca, dataInicio, dataFim]);
+  useEffect(() => { setPagina(1); }, [busca, dataInicio, dataFim, regraFiltro]);
 
   function exportarExcel() {
     const ws = XLSX.utils.aoa_to_sheet([
@@ -120,10 +129,11 @@ export default function Regulacoes({ tema, cores }) {
       ["", "", "", "Total de procedimentos", totalProc],
       ["", "", "", "Média por guia", media],
       [],
-      ["Nº da Guia", "Qtd. Procedimentos", "Data de Execução"],
+      ["Nº da Guia", "Qtd. Procedimentos", "Data de Execução", "Regra Aplicada"],
       ...filtrados.map((r) => [
         r.numero_guia || "—",
         r.procedimentos?.length ?? 0,
+        r.regra_aplicada || "",
         formatarDataHora(r.data_execucao),
       ]),
     ]);
@@ -178,6 +188,17 @@ export default function Regulacoes({ tema, cores }) {
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
           />
+          <label>Regra:</label>
+          <select
+            className="filtro-processo"
+            value={regraFiltro}
+            onChange={(e) => setRegraFiltro(e.target.value)}
+          >
+            <option value="">Todas</option>
+            {regrasUnicas.map((r) => (
+              <option key={r} value={r}>{r.replace(/_/g, " ")}</option>
+            ))}
+          </select>
           <label>Período:</label>
           <input
             className="filtro-data"
@@ -194,7 +215,7 @@ export default function Regulacoes({ tema, cores }) {
           />
           <button
             className="btn-tema"
-            onClick={() => { setBusca(""); setDataInicio(""); setDataFim(""); }}
+            onClick={() => { setBusca(""); setDataInicio(""); setDataFim(""); setRegraFiltro(""); }}
           >
             <span className="material-symbols-outlined">mop</span>
             Limpar Filtros
@@ -216,18 +237,20 @@ export default function Regulacoes({ tema, cores }) {
               <tr>
                 <th style={{ color: cores.texto }}>Nº da Guia</th>
                 <th style={{ color: cores.texto }}>Qtd. Procedimentos</th>
+                <th style={{ color: cores.texto }}>Regra Aplicada</th>
                 <th style={{ color: cores.texto }}>Data de Execução</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={3} style={{ color: cores.texto, padding: 32 }}>Carregando...</td></tr>
+                <tr><td colSpan={4} style={{ color: cores.texto, padding: 32 }}>Carregando...</td></tr>
               ) : filtrados.length === 0 ? (
-                <tr><td colSpan={3} style={{ color: cores.texto, padding: 32 }}>Nenhum registro encontrado.</td></tr>
+                <tr><td colSpan={4} style={{ color: cores.texto, padding: 32 }}>Nenhum registro encontrado.</td></tr>
               ) : paginaDados.map((r, i) => (
                 <tr key={i}>
                   <td style={{ color: cores.texto }}>{r.numero_guia || "—"}</td>
                   <td style={{ color: cores.texto }}>{r.procedimentos?.length ?? 0}</td>
+                  <td style={{ color: cores.texto }}>{r.regra_aplicada ? r.regra_aplicada.replace(/_/g, " ") : "—"}</td>
                   <td style={{ color: cores.texto }}>{formatarDataHora(r.data_execucao)}</td>
                 </tr>
               ))}
