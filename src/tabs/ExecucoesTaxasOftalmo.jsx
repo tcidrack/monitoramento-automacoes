@@ -24,59 +24,74 @@ function formatarDataHora(iso) {
   );
 }
 
-function getDataOnly(iso) {
-  if (!iso) return null;
-  const d = new Date(iso);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+function dataInicioPadrao() {
+  const d = new Date();
+  d.setDate(d.getDate() - 60);
+  return d.toISOString().slice(0, 10);
 }
 
 export default function ExecucoesTaxasOftalmo({ tema, cores }) {
   const [busca, setBusca] = useState("");
-  const [dataInicio, setDataInicio] = useState("");
+  const [dataInicio, setDataInicio] = useState(dataInicioPadrao);
   const [dataFim, setDataFim] = useState("");
   const ITENS_POR_PAGINA = 20;
   const [pagina, setPagina] = useState(1);
+  const [totais, setTotais] = useState({ nproc: 0, nguias: 0, ntaxas: 0, nproc90262610: 0 });
 
   const accentColor = tema === "escuro" ? "#FFCB05" : "#FF0073";
 
-  const fetchExecucoes = useCallback(async () => {
-    const { data, error } = await supabase
+  const fetchExecucoes = useCallback(async (signal) => {
+    let q = supabase
       .from("execucoes_taxas_oftalmo")
-      .select("*")
-      .order("data_execucao", { ascending: false });
-    if (!error) return data || [];
-    return [];
-  }, []);
+      .select("id, numero_processo, qtd_guias, qtd_taxas, qtd_regra_90262610, codigos_taxas, data_execucao")
+      .order("data_execucao", { ascending: false })
+      .limit(1000);
+    if (dataInicio) q = q.gte("data_execucao", dataInicio);
+    if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+    if (signal) q = q.abortSignal(signal);
+    const { data, error } = await q;
+    if (error) return [];
+    return data || [];
+  }, [dataInicio, dataFim]);
 
-  const { data: dados, loading } = usePollingFetch(fetchExecucoes, 30000);
+  const { data: dados, loading } = usePollingFetch(
+    fetchExecucoes,
+    120000,
+    [dataInicio, dataFim]
+  );
 
-  function filtrarPorPeriodo(lista) {
-    return lista.filter((r) => {
-      const exec = getDataOnly(r.data_execucao);
-      if (!exec) return false;
-      if (dataInicio) {
-        const [y, m, d] = dataInicio.split("-");
-        if (exec < new Date(y, m - 1, d)) return false;
-      }
-      if (dataFim) {
-        const [y, m, d] = dataFim.split("-");
-        if (exec > new Date(y, m - 1, d)) return false;
-      }
-      return true;
-    });
-  }
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      let q = supabase
+        .from("execucoes_taxas_oftalmo")
+        .select("nproc:id.count(), nguias:qtd_guias.sum(), ntaxas:qtd_taxas.sum(), nproc90262610:qtd_regra_90262610.sum()");
+      if (dataInicio) q = q.gte("data_execucao", dataInicio);
+      if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+      const { data, error } = await q;
+      if (!ativo || error) return;
+      const t = data?.[0] || {};
+      setTotais({
+        nproc: t.nproc || 0,
+        nguias: t.nguias || 0,
+        ntaxas: t.ntaxas || 0,
+        nproc90262610: t.nproc90262610 || 0,
+      });
+    })();
+    return () => { ativo = false; };
+  }, [dataInicio, dataFim]);
 
-  let filtrados = filtrarPorPeriodo(dados);
+  let filtrados = dados;
   if (busca.trim()) {
     filtrados = filtrados.filter((r) =>
       (r.numero_processo || "").toLowerCase().includes(busca.trim().toLowerCase())
     );
   }
 
-  const totalProcessos = dados?.length || 0;
-  const totalGuias = filtrados.reduce((acc, r) => acc + (r.qtd_guias || 0), 0);
-  const totalTaxas = filtrados.reduce((acc, r) => acc + (r.qtd_taxas || 0), 0);
-  const totalProcedimento9026 = filtrados.reduce((acc, r) => acc + (r.qtd_regra_90262610 || 0), 0);
+  const totalProcessos = totais.nproc;
+  const totalGuias = totais.nguias;
+  const totalTaxas = totais.ntaxas;
+  const totalProcedimento9026 = totais.nproc90262610;
 
   const taxCount = {};
   dados.forEach((r) => {

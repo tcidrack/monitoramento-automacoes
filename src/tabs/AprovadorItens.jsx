@@ -15,88 +15,117 @@ function formatarDataHora(iso) {
   );
 }
 
-function getDataOnly(iso) {
-  if (!iso) return null;
-  const d = new Date(iso);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+function dataInicioPadrao() {
+  const d = new Date();
+  d.setDate(d.getDate() - 60);
+  return d.toISOString().slice(0, 10);
 }
 
 export default function AprovadorItens({ tema, cores }) {
   const ITENS_POR_PAGINA = 20;
   const [pagina, setPagina] = useState(1);
-const [buscaLote, setBuscaLote] = useState("");
+  const [buscaLote, setBuscaLote] = useState("");
   const [buscaPrestador, setBuscaPrestador] = useState("");
   const [buscaCliente, setBuscaCliente] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("Todos");
-  const [dataInicio, setDataInicio] = useState("");
+  const [dataInicio, setDataInicio] = useState(dataInicioPadrao);
   const [dataFim, setDataFim] = useState("");
+  const [prestadoresUnicos, setPrestadoresUnicos] = useState([]);
+  const [clientesUnicos, setClientesUnicos] = useState([]);
+  const [totais, setTotais] = useState({ aprov: 0, glos: 0, erro: 0, tmin: 0, tseg: 0, nlotes: 0 });
 
   const accentColor = tema === "escuro" ? "#FFCB05" : "#FF0073";
   const COLOR_APROV = tema === "escuro" ? "#34d399" : "#059669";
   const COLOR_GLOS = tema === "escuro" ? "#fbbf24" : "#d97706";
   const COLOR_ERRO = tema === "escuro" ? "#ff0000" : "#dc2626";
 
-  const fetchAprovador = useCallback(async () => {
-    const { data, error } = await supabase
+  const fetchAprovador = useCallback(async (signal) => {
+    let q = supabase
       .from("aprovador_itens")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (!error) return data || [];
-    return [];
+      .select("id, cliente, prestador, numero_lote, qtd_itens_aprovados, qtd_itens_glosados, qtd_itens_erro, tempo_gasto_minutos, tempo_gasto_segundos, created_at")
+      .order("created_at", { ascending: false })
+      .limit(1000);
+    if (dataInicio) q = q.gte("created_at", dataInicio);
+    if (dataFim) q = q.lte("created_at", dataFim + "T23:59:59");
+    if (buscaPrestador) q = q.eq("prestador", buscaPrestador);
+    if (buscaCliente) q = q.eq("cliente", buscaCliente);
+    if (filtroStatus === "Aprovados") q = q.gt("qtd_itens_aprovados", 0);
+    else if (filtroStatus === "Glosados") q = q.gt("qtd_itens_glosados", 0);
+    else if (filtroStatus === "Erro do sistema") q = q.gt("qtd_itens_erro", 0);
+    if (signal) q = q.abortSignal(signal);
+    const { data, error } = await q;
+    if (error) return [];
+    return data || [];
+  }, [dataInicio, dataFim, buscaPrestador, buscaCliente, filtroStatus]);
+
+  const { data: dados, loading } = usePollingFetch(
+    fetchAprovador,
+    120000,
+    [dataInicio, dataFim, buscaPrestador, buscaCliente, filtroStatus]
+  );
+
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      const { data, error } = await supabase
+        .from("aprovador_itens")
+        .select("cliente, prestador")
+        .limit(5000);
+      if (!ativo || error) return;
+      const prest = [...new Set((data || []).map((r) => r.prestador).filter(Boolean))].sort();
+      const cli = [...new Set((data || []).map((r) => r.cliente).filter(Boolean))].sort();
+      setPrestadoresUnicos(prest);
+      setClientesUnicos(cli);
+    })();
+    return () => { ativo = false; };
   }, []);
 
-  const { data: dados, loading } = usePollingFetch(fetchAprovador, 30000);
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      let q = supabase
+        .from("aprovador_itens")
+        .select("aprov:qtd_itens_aprovados.sum(), glos:qtd_itens_glosados.sum(), erro:qtd_itens_erro.sum(), tmin:tempo_gasto_minutos.sum(), tseg:tempo_gasto_segundos.sum(), nlotes:id.count()");
+      if (dataInicio) q = q.gte("created_at", dataInicio);
+      if (dataFim) q = q.lte("created_at", dataFim + "T23:59:59");
+      if (buscaPrestador) q = q.eq("prestador", buscaPrestador);
+      if (buscaCliente) q = q.eq("cliente", buscaCliente);
+      if (filtroStatus === "Aprovados") q = q.gt("qtd_itens_aprovados", 0);
+      else if (filtroStatus === "Glosados") q = q.gt("qtd_itens_glosados", 0);
+      else if (filtroStatus === "Erro do sistema") q = q.gt("qtd_itens_erro", 0);
+      const { data, error } = await q;
+      if (!ativo || error) return;
+      const t = data?.[0] || {};
+      setTotais({
+        aprov: t.aprov || 0,
+        glos: t.glos || 0,
+        erro: t.erro || 0,
+        tmin: t.tmin || 0,
+        tseg: t.tseg || 0,
+        nlotes: t.nlotes || 0,
+      });
+    })();
+    return () => { ativo = false; };
+  }, [dataInicio, dataFim, buscaPrestador, buscaCliente, filtroStatus]);
 
-  function filtrarPorPeriodo(lista) {
-    return lista.filter((r) => {
-      const exec = getDataOnly(r.created_at);
-      if (!exec) return false;
-      if (dataInicio) {
-        const [y, m, d] = dataInicio.split("-");
-        if (exec < new Date(y, m - 1, d)) return false;
-      }
-      if (dataFim) {
-        const [y, m, d] = dataFim.split("-");
-        if (exec > new Date(y, m - 1, d)) return false;
-      }
-      return true;
-    });
-  }
-
-  const prestadoresUnicos = [...new Set(dados.map((r) => r.prestador).filter(Boolean))];
-  const clientesUnicos = [...new Set(dados.map((r) => r.cliente).filter(Boolean))];
-
-  let filtrados = filtrarPorPeriodo(dados);
-  if (buscaPrestador) {
-    filtrados = filtrados.filter((r) => r.prestador === buscaPrestador);
-  }
-  if (buscaCliente) {
-    filtrados = filtrados.filter((r) => r.cliente === buscaCliente);
-  }
-  if (filtroStatus === "Aprovados") {
-    filtrados = filtrados.filter((r) => (r.qtd_itens_aprovados || 0) > 0);
-  } else if (filtroStatus === "Glosados") {
-    filtrados = filtrados.filter((r) => (r.qtd_itens_glosados || 0) > 0);
-  } else if (filtroStatus === "Erro do sistema") {
-    filtrados = filtrados.filter((r) => (r.qtd_itens_erro || 0) > 0);
-  }
+  let filtrados = dados;
   if (buscaLote.trim()) {
     filtrados = filtrados.filter((r) =>
       (r.numero_lote || "").toLowerCase().includes(buscaLote.trim().toLowerCase())
     );
   }
 
-  const totalAprov = filtrados.reduce((acc, r) => acc + (r.qtd_itens_aprovados || 0), 0);
-  const totalGlos = filtrados.reduce((acc, r) => acc + (r.qtd_itens_glosados || 0), 0);
-  const totalErro = filtrados.reduce((acc, r) => acc + (r.qtd_itens_erro || 0), 0);
+  const totalAprov = totais.aprov;
+  const totalGlos = totais.glos;
+  const totalErro = totais.erro;
   const totalBase = totalAprov + totalGlos;
   const totalGeral = totalBase + totalErro;
   const taxaAprovGlos = totalGeral > 0 ? ((totalBase / totalGeral) * 100).toFixed(1) : "0";
 
-  const totalMin = filtrados.reduce((acc, r) => acc + (r.tempo_gasto_minutos || 0), 0);
-  const totalSeg = filtrados.reduce((acc, r) => acc + (r.tempo_gasto_segundos || 0), 0);
+  const totalMin = totais.tmin;
+  const totalSeg = totais.tseg;
   const tempoTotal = totalMin + Math.floor(totalSeg / 60);
-  const avgTempo = filtrados.length > 0 ? (tempoTotal / filtrados.length).toFixed(1) : "0";
+  const avgTempo = totais.nlotes > 0 ? (tempoTotal / totais.nlotes).toFixed(1) : "0";
 
   const chartData = [
     { nome: "Aprovados", valor: totalAprov },

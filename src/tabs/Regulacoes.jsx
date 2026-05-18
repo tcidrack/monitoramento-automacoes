@@ -25,64 +25,84 @@ function formatarDataHora(iso) {
   );
 }
 
-function getDataOnly(iso) {
-  if (!iso) return null;
-  const d = new Date(iso);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+function dataInicioPadrao() {
+  const d = new Date();
+  d.setDate(d.getDate() - 60);
+  return d.toISOString().slice(0, 10);
 }
 
 export default function Regulacoes({ tema, cores }) {
   const [busca, setBusca] = useState("");
-  const [dataInicio, setDataInicio] = useState("");
+  const [dataInicio, setDataInicio] = useState(dataInicioPadrao);
   const [dataFim, setDataFim] = useState("");
   const [regraFiltro, setRegraFiltro] = useState("");
+  const [regrasUnicas, setRegrasUnicas] = useState([]);
+  const [totalGuiasServer, setTotalGuiasServer] = useState(0);
   const ITENS_POR_PAGINA = 20;
   const [pagina, setPagina] = useState(1);
 
   const accentColor = tema === "escuro" ? "#FFCB05" : "#FF0073";
 
-  const fetchRegulacoes = useCallback(async () => {
-    const { data, error } = await supabase
+  const fetchRegulacoes = useCallback(async (signal) => {
+    let q = supabase
       .from("regulacoes")
-      .select("*")
-      .order("data_execucao", { ascending: false });
-    if (!error) return data || [];
-    return [];
+      .select("id, numero_guia, procedimentos, regra_aplicada, data_execucao")
+      .order("data_execucao", { ascending: false })
+      .limit(1000);
+    if (dataInicio) q = q.gte("data_execucao", dataInicio);
+    if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+    if (regraFiltro) q = q.eq("regra_aplicada", regraFiltro);
+    if (signal) q = q.abortSignal(signal);
+    const { data, error } = await q;
+    if (error) return [];
+    return data || [];
+  }, [dataInicio, dataFim, regraFiltro]);
+
+  const { data: dados, loading } = usePollingFetch(
+    fetchRegulacoes,
+    120000,
+    [dataInicio, dataFim, regraFiltro]
+  );
+
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      const { data, error } = await supabase
+        .from("regulacoes")
+        .select("regra_aplicada")
+        .not("regra_aplicada", "is", null)
+        .limit(5000);
+      if (!ativo || error) return;
+      const unicas = [...new Set((data || []).map((r) => r.regra_aplicada).filter(Boolean))].sort();
+      setRegrasUnicas(unicas);
+    })();
+    return () => { ativo = false; };
   }, []);
 
-  const { data: dados, loading } = usePollingFetch(fetchRegulacoes, 30000);
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      let q = supabase.from("regulacoes").select("*", { count: "exact", head: true });
+      if (dataInicio) q = q.gte("data_execucao", dataInicio);
+      if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+      if (regraFiltro) q = q.eq("regra_aplicada", regraFiltro);
+      const { count } = await q;
+      if (ativo) setTotalGuiasServer(count || 0);
+    })();
+    return () => { ativo = false; };
+  }, [dataInicio, dataFim, regraFiltro]);
 
-  function filtrarPorPeriodo(lista) {
-    return lista.filter((r) => {
-      const exec = getDataOnly(r.data_execucao);
-      if (!exec) return false;
-      if (dataInicio) {
-        const [y, m, d] = dataInicio.split("-");
-        if (exec < new Date(y, m - 1, d)) return false;
-      }
-      if (dataFim) {
-        const [y, m, d] = dataFim.split("-");
-        if (exec > new Date(y, m - 1, d)) return false;
-      }
-      return true;
-    });
-  }
-
-  const regrasUnicas = [...new Set(dados.map((r) => r.regra_aplicada).filter(Boolean))].sort();
-
-  let filtrados = filtrarPorPeriodo(dados);
+  let filtrados = dados;
   if (busca.trim()) {
     filtrados = filtrados.filter((r) =>
       (r.numero_guia || "").toLowerCase().includes(busca.trim().toLowerCase())
     );
   }
-  if (regraFiltro) {
-    filtrados = filtrados.filter((r) => r.regra_aplicada === regraFiltro);
-  }
 
-  const totalGuias = filtrados.length;
+  const totalGuias = totalGuiasServer;
+  const totalGuiasAmostra = filtrados.length;
   const totalProc = filtrados.reduce((acc, r) => acc + (r.procedimentos?.length || 0), 0);
-  const media = totalGuias > 0 ? (totalProc / totalGuias).toFixed(1) : "0";
+  const media = totalGuiasAmostra > 0 ? (totalProc / totalGuiasAmostra).toFixed(1) : "0";
 
   // Contagem de procedimentos para gráfico
   const procCount = {};
@@ -153,10 +173,12 @@ export default function Regulacoes({ tema, cores }) {
         <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
           <h3>Total de Procedimentos</h3>
           <p>{totalProc.toLocaleString("pt-BR")}</p>
+          <p style={{ fontSize: 11, fontWeight: 400, opacity: 0.7 }}>amostra das {totalGuiasAmostra.toLocaleString("pt-BR")} guias mais recentes</p>
         </div>
         <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
           <h3>Média por Guia</h3>
           <p>{media} proc.</p>
+          <p style={{ fontSize: 11, fontWeight: 400, opacity: 0.7 }}>sobre amostra das {totalGuiasAmostra.toLocaleString("pt-BR")} mais recentes</p>
         </div>
       </div>
 

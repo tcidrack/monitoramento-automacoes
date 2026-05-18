@@ -1,50 +1,82 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
-export function usePollingFetch(fetchFn, intervalMs = 30000) {
+export function usePollingFetch(fetchFn, intervalMs = 120000, deps = []) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
-  const intervalRef = useRef(null);
+
   const fetchFnRef = useRef(fetchFn);
+  const intervalRef = useRef(null);
+  const abortRef = useRef(null);
+  const inFlightRef = useRef(false);
 
   useEffect(() => {
     fetchFnRef.current = fetchFn;
   }, [fetchFn]);
 
   const fetchData = useCallback(async (isBackground = false) => {
-    if (isBackground) {
-      setUpdating(true);
-    } else {
-      setLoading(true);
-    }
-    
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    if (isBackground) setUpdating(true);
+    else setLoading(true);
+
     try {
-      const result = await fetchFnRef.current();
-      setData(result);
+      const result = await fetchFnRef.current(controller.signal);
+      if (!controller.signal.aborted) setData(result);
     } catch (error) {
-      console.error("Erro ao buscar dados:", error);
+      if (error?.name !== "AbortError") console.error("Erro ao buscar dados:", error);
     } finally {
-      setLoading(false);
-      setUpdating(false);
+      inFlightRef.current = false;
+      if (!controller.signal.aborted) {
+        setLoading(false);
+        setUpdating(false);
+      }
+    }
+  }, []);
+
+  const startInterval = useCallback(() => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(() => fetchData(true), intervalMs);
+  }, [intervalMs, fetchData]);
+
+  const stopInterval = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
   }, []);
 
   useEffect(() => {
-    const initialLoad = async () => {
-      await fetchData(false);
-    };
-    initialLoad();
-
-    intervalRef.current = setInterval(() => {
-      fetchData(true);
-    }, intervalMs);
-
+    fetchData(false);
+    if (typeof document === "undefined" || document.visibilityState === "visible") {
+      startInterval();
+    }
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+      stopInterval();
+      if (abortRef.current) abortRef.current.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [intervalMs, fetchData, ...deps]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchData(true);
+        startInterval();
+      } else {
+        stopInterval();
+        if (abortRef.current) abortRef.current.abort();
       }
     };
-  }, [intervalMs, fetchData]);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [fetchData, startInterval, stopInterval]);
 
   const refresh = useCallback(() => {
     fetchData(true);

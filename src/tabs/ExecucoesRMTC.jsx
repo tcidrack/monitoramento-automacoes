@@ -15,17 +15,20 @@ function formatarDataHora(iso) {
   );
 }
 
-function getDataOnly(iso) {
-  if (!iso) return null;
-  const d = new Date(iso);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+function dataInicioPadrao() {
+  const d = new Date();
+  d.setDate(d.getDate() - 60);
+  return d.toISOString().slice(0, 10);
 }
 
 export default function ExecucoesRMTC({ tema, cores }) {
   const [busca, setBusca] = useState("");
   const [filtroTipo, setFiltroTipo] = useState("Todos");
-  const [dataInicio, setDataInicio] = useState("");
+  const [dataInicio, setDataInicio] = useState(dataInicioPadrao);
   const [dataFim, setDataFim] = useState("");
+  const [totalRM, setTotalRM] = useState(0);
+  const [totalTC, setTotalTC] = useState(0);
+  const [totalGuiasServer, setTotalGuiasServer] = useState(0);
   const ITENS_POR_PAGINA = 20;
   const [pagina, setPagina] = useState(1);
 
@@ -33,48 +36,73 @@ export default function ExecucoesRMTC({ tema, cores }) {
   const COLOR_RM = tema === "escuro" ? "#60a5fa" : "#1d4ed8";
   const COLOR_TC = tema === "escuro" ? "#f87171" : "#dc2626";
 
-  const fetchExecucoes = useCallback(async () => {
-    const { data, error } = await supabase
+  const fetchExecucoes = useCallback(async (signal) => {
+    let q = supabase
       .from("execucoes_rmtc")
-      .select("*")
-      .order("data_execucao", { ascending: false });
-    if (!error) return data || [];
-    return [];
-  }, []);
+      .select("id, numero_processo, tipo, quantidade_guias, data_execucao")
+      .order("data_execucao", { ascending: false })
+      .limit(1000);
+    if (dataInicio) q = q.gte("data_execucao", dataInicio);
+    if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+    if (filtroTipo !== "Todos") q = q.eq("tipo", filtroTipo);
+    if (signal) q = q.abortSignal(signal);
+    const { data, error } = await q;
+    if (error) return [];
+    return data || [];
+  }, [dataInicio, dataFim, filtroTipo]);
 
-  const { data: dados, loading } = usePollingFetch(fetchExecucoes, 30000);
+  const { data: dados, loading } = usePollingFetch(
+    fetchExecucoes,
+    120000,
+    [dataInicio, dataFim, filtroTipo]
+  );
 
-  function filtrarPorPeriodo(lista) {
-    return lista.filter((r) => {
-      const exec = getDataOnly(r.data_execucao);
-      if (!exec) return false;
-      if (dataInicio) {
-        const [y, m, d] = dataInicio.split("-");
-        if (exec < new Date(y, m - 1, d)) return false;
-      }
-      if (dataFim) {
-        const [y, m, d] = dataFim.split("-");
-        if (exec > new Date(y, m - 1, d)) return false;
-      }
-      return true;
-    });
-  }
+  useEffect(() => {
+    let ativo = true;
+    const countTipo = (tipo) => {
+      let q = supabase
+        .from("execucoes_rmtc")
+        .select("tipo", { count: "exact", head: true })
+        .eq("tipo", tipo);
+      if (dataInicio) q = q.gte("data_execucao", dataInicio);
+      if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+      return q;
+    };
+    (async () => {
+      const [{ count: cRM }, { count: cTC }] = await Promise.all([countTipo("RM"), countTipo("TC")]);
+      if (!ativo) return;
+      setTotalRM(cRM || 0);
+      setTotalTC(cTC || 0);
+    })();
+    return () => { ativo = false; };
+  }, [dataInicio, dataFim]);
 
-  let filtrados = filtrarPorPeriodo(dados);
-  if (filtroTipo !== "Todos") filtrados = filtrados.filter((r) => r.tipo === filtroTipo);
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      let q = supabase.from("execucoes_rmtc").select("nguias:quantidade_guias.sum()");
+      if (dataInicio) q = q.gte("data_execucao", dataInicio);
+      if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+      if (filtroTipo !== "Todos") q = q.eq("tipo", filtroTipo);
+      const { data, error } = await q;
+      if (!ativo || error) return;
+      setTotalGuiasServer(data?.[0]?.nguias || 0);
+    })();
+    return () => { ativo = false; };
+  }, [dataInicio, dataFim, filtroTipo]);
+
+  let filtrados = dados;
   if (busca.trim()) {
     filtrados = filtrados.filter((r) =>
       (r.numero_processo || "").toLowerCase().includes(busca.trim().toLowerCase())
     );
   }
 
-  const totalRM = dados.filter((r) => r.tipo === "RM").length;
-  const totalTC = dados.filter((r) => r.tipo === "TC").length;
-  const totalGuias = filtrados.reduce((acc, r) => acc + (r.quantidade_guias || 0), 0);
+  const totalGuias = totalGuiasServer;
 
   const chartData = [
-    { nome: "RM", valor: dados.filter((r) => r.tipo === "RM").length },
-    { nome: "TC", valor: dados.filter((r) => r.tipo === "TC").length },
+    { nome: "RM", valor: totalRM },
+    { nome: "TC", valor: totalTC },
   ];
 
   const totalPaginas = Math.ceil(filtrados.length / ITENS_POR_PAGINA);
