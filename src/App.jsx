@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Routes, Route, NavLink, Navigate } from "react-router-dom";
 import "./App.css";
 import Regulacoes from "./tabs/Regulacoes";
 import ExecucoesRMTC from "./tabs/ExecucoesRMTC";
@@ -25,15 +26,14 @@ function Loader({ cor }) {
 }
 
 const ABAS = [
-  { id: "regulacoes",   label: "Regulações",        icon: "assignment" },
-  { id: "rmtc",         label: "Deflator RM/TC",   icon: "percent_discount" },
-  { id: "aprovador",    label: "Aprovador de Itens", icon: "check_circle" },
-  { id: "taxasOftalmo", label: "Taxas Oftalmo",    icon: "visibility" },
+  { path: "regulacoes",    label: "Regulações",         icon: "assignment" },
+  { path: "rmtc",          label: "Deflator RM/TC",     icon: "percent_discount" },
+  { path: "aprovador",     label: "Aprovador de Itens", icon: "check_circle" },
+  { path: "taxas-oftalmo", label: "Taxas Oftalmo",      icon: "visibility" },
 ];
 
 export default function App() {
   const [tema, setTema] = useState(() => localStorage.getItem("tema") || "claro");
-  const [abaAtiva, setAbaAtiva] = useState("regulacoes");
 
   const cores = {
     claro: { fundo: "#0070FF", card: "#E5F0FF", texto: "#000" },
@@ -49,13 +49,6 @@ export default function App() {
   }
 
   const coresAtivas = cores[tema];
-
-  const componenteAtivo = {
-    regulacoes: <Regulacoes tema={tema} cores={coresAtivas} />,
-    rmtc:       <ExecucoesRMTC tema={tema} cores={coresAtivas} />,
-    aprovador:  <AprovadorItens tema={tema} cores={coresAtivas} />,
-    taxasOftalmo: <ExecucoesTaxasOftalmo tema={tema} cores={coresAtivas} />,
-  }[abaAtiva];
 
   return (
     <div
@@ -91,21 +84,28 @@ export default function App() {
       {/* ABAS */}
       <div className="abas">
         {ABAS.map((aba) => (
-          <button
-            key={aba.id}
-            className={`aba-btn ${abaAtiva === aba.id ? "ativa" : ""}`}
-            onClick={() => setAbaAtiva(aba.id)}
+          <NavLink
+            key={aba.path}
+            to={`/${aba.path}`}
+            className={({ isActive }) => `aba-btn ${isActive ? "ativa" : ""}`}
           >
             <span className="material-symbols-outlined" style={{ marginRight: 0 }}>
               {aba.icon}
             </span>
             {aba.label}
-          </button>
+          </NavLink>
         ))}
       </div>
 
       {/* CONTEÚDO DA ABA */}
-      {componenteAtivo}
+      <Routes>
+        <Route path="/" element={<Navigate to="/regulacoes" replace />} />
+        <Route path="/regulacoes"    element={<Regulacoes tema={tema} cores={coresAtivas} />} />
+        <Route path="/rmtc"          element={<ExecucoesRMTC tema={tema} cores={coresAtivas} />} />
+        <Route path="/aprovador"     element={<AprovadorItens tema={tema} cores={coresAtivas} />} />
+        <Route path="/taxas-oftalmo" element={<ExecucoesTaxasOftalmo tema={tema} cores={coresAtivas} />} />
+        <Route path="*" element={<Navigate to="/regulacoes" replace />} />
+      </Routes>
     </div>
   );
 }

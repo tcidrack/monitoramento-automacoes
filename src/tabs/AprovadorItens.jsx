@@ -161,7 +161,7 @@ export default function AprovadorItens({ tema, cores }) {
       ["", "", "", "Total aprovados", totalAprov],
       ["", "", "", "Total glosados", totalGlos],
       ["", "", "", "Total erros", totalErro],
-      ["", "", "", "Taxa de aprovação", taxaAprov + "%"],
+      ["", "", "", "Taxa de aprovação", taxaAprovGlos + "%"],
       ["", "", "", "Tempo médio/lote", avgTempo + " min"],
       [],
       ["Cliente", "Prestador", "Nº do Lote", "Aprovados", "Glosados", "Erro", "Tempo (min)", "Tempo (seg)", "Data"],
