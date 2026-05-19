@@ -25,19 +25,24 @@ function formatarDataHora(iso) {
   );
 }
 
-function dataInicioPadrao() {
+function inicioDoDiaISO() {
   const d = new Date();
-  d.setDate(d.getDate() - 60);
-  return d.toISOString().slice(0, 10);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
+function dataHoje() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export default function Regulacoes({ tema, cores }) {
   const [busca, setBusca] = useState("");
-  const [dataInicio, setDataInicio] = useState(dataInicioPadrao);
+  const [dataInicio, setDataInicio] = useState(dataHoje);
   const [dataFim, setDataFim] = useState("");
   const [regraFiltro, setRegraFiltro] = useState("");
   const [regrasUnicas, setRegrasUnicas] = useState([]);
   const [totalGuiasServer, setTotalGuiasServer] = useState(0);
+  const [topProc, setTopProc] = useState([]);
   const ITENS_POR_PAGINA = 20;
   const [pagina, setPagina] = useState(1);
 
@@ -48,8 +53,12 @@ export default function Regulacoes({ tema, cores }) {
       .from("regulacoes")
       .select("id, numero_guia, procedimentos, regra_aplicada, data_execucao")
       .order("data_execucao", { ascending: false })
-      .limit(1000);
-    if (dataInicio) q = q.gte("data_execucao", dataInicio);
+      .limit(200);
+    if (dataInicio) {
+      q = q.gte("data_execucao", dataInicio);
+    } else if (!dataFim) {
+      q = q.gte("data_execucao", inicioDoDiaISO());
+    }
     if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
     if (regraFiltro) q = q.eq("regra_aplicada", regraFiltro);
     if (signal) q = q.abortSignal(signal);
@@ -65,6 +74,17 @@ export default function Regulacoes({ tema, cores }) {
   );
 
   useEffect(() => {
+    const KEY = "regulacoes_regras_cache";
+    const cached = localStorage.getItem(KEY);
+    if (cached) {
+      try {
+        const { ts, data } = JSON.parse(cached);
+        if (Date.now() - ts < 24 * 60 * 60 * 1000) {
+          setRegrasUnicas(data);
+          return;
+        }
+      } catch { /* cache inválido, segue para fetch */ }
+    }
     let ativo = true;
     (async () => {
       const { data, error } = await supabase
@@ -75,9 +95,25 @@ export default function Regulacoes({ tema, cores }) {
       if (!ativo || error) return;
       const unicas = [...new Set((data || []).map((r) => r.regra_aplicada).filter(Boolean))].sort();
       setRegrasUnicas(unicas);
+      localStorage.setItem(KEY, JSON.stringify({ ts: Date.now(), data: unicas }));
     })();
     return () => { ativo = false; };
   }, []);
+
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      const { data, error } = await supabase.rpc("regulacoes_top_procedimentos", {
+        d_inicio: dataInicio || null,
+        d_fim: dataFim ? dataFim + "T23:59:59" : null,
+        regra: regraFiltro || null,
+        limite: 1000,
+      });
+      if (!ativo || error) return;
+      setTopProc(data || []);
+    })();
+    return () => { ativo = false; };
+  }, [dataInicio, dataFim, regraFiltro]);
 
   useEffect(() => {
     let ativo = true;
@@ -100,24 +136,16 @@ export default function Regulacoes({ tema, cores }) {
   }
 
   const totalGuias = totalGuiasServer;
-  const totalGuiasAmostra = filtrados.length;
-  const totalProc = filtrados.reduce((acc, r) => acc + (r.procedimentos?.length || 0), 0);
-  const media = totalGuiasAmostra > 0 ? (totalProc / totalGuiasAmostra).toFixed(1) : "0";
+  const totalProc = topProc.reduce((acc, p) => acc + Number(p.qtd || 0), 0);
+  const media = totalGuias > 0 ? (totalProc / totalGuias).toFixed(1) : "0";
 
-  // Contagem de procedimentos para gráfico
-  const procCount = {};
-  filtrados.forEach((r) => {
-    r.procedimentos?.forEach((p) => {
-      procCount[p] = (procCount[p] || 0) + 1;
-    });
-  });
-  const chartData = Object.entries(procCount)
-    .sort((a, b) => b[1] - a[1])
+  const chartData = topProc
     .slice(0, 8)
-    .map(([codigo, valor]) => {
+    .map((p) => {
+      const codigo = p.codigo;
       const nome = PROC_LABELS[codigo];
       const rotulo = nome ? `${codigo} - ${nome}` : codigo;
-      return { nome: rotulo.length > 45 ? rotulo.slice(0, 45) + "…" : rotulo, valor };
+      return { nome: rotulo.length > 45 ? rotulo.slice(0, 45) + "…" : rotulo, valor: Number(p.qtd) };
     });
 
   const totalPaginas = Math.ceil(filtrados.length / ITENS_POR_PAGINA);
@@ -173,12 +201,10 @@ export default function Regulacoes({ tema, cores }) {
         <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
           <h3>Total de Procedimentos</h3>
           <p>{totalProc.toLocaleString("pt-BR")}</p>
-          <p style={{ fontSize: 11, fontWeight: 400, opacity: 0.7 }}>amostra das {totalGuiasAmostra.toLocaleString("pt-BR")} guias mais recentes</p>
         </div>
         <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
           <h3>Média por Guia</h3>
           <p>{media} proc.</p>
-          <p style={{ fontSize: 11, fontWeight: 400, opacity: 0.7 }}>sobre amostra das {totalGuiasAmostra.toLocaleString("pt-BR")} mais recentes</p>
         </div>
       </div>
 

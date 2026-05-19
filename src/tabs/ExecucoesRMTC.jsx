@@ -15,16 +15,20 @@ function formatarDataHora(iso) {
   );
 }
 
-function dataInicioPadrao() {
+function inicioDoDiaISO() {
   const d = new Date();
-  d.setDate(d.getDate() - 60);
-  return d.toISOString().slice(0, 10);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
+function dataHoje() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export default function ExecucoesRMTC({ tema, cores }) {
   const [busca, setBusca] = useState("");
   const [filtroTipo, setFiltroTipo] = useState("Todos");
-  const [dataInicio, setDataInicio] = useState(dataInicioPadrao);
+  const [dataInicio, setDataInicio] = useState(dataHoje);
   const [dataFim, setDataFim] = useState("");
   const [totalRM, setTotalRM] = useState(0);
   const [totalTC, setTotalTC] = useState(0);
@@ -41,8 +45,12 @@ export default function ExecucoesRMTC({ tema, cores }) {
       .from("execucoes_rmtc")
       .select("id, numero_processo, tipo, quantidade_guias, data_execucao")
       .order("data_execucao", { ascending: false })
-      .limit(1000);
-    if (dataInicio) q = q.gte("data_execucao", dataInicio);
+      .limit(200);
+    if (dataInicio) {
+      q = q.gte("data_execucao", dataInicio);
+    } else if (!dataFim) {
+      q = q.gte("data_execucao", inicioDoDiaISO());
+    }
     if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
     if (filtroTipo !== "Todos") q = q.eq("tipo", filtroTipo);
     if (signal) q = q.abortSignal(signal);

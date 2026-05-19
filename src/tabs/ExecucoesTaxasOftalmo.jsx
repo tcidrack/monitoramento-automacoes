@@ -24,19 +24,24 @@ function formatarDataHora(iso) {
   );
 }
 
-function dataInicioPadrao() {
+function inicioDoDiaISO() {
   const d = new Date();
-  d.setDate(d.getDate() - 60);
-  return d.toISOString().slice(0, 10);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
+function dataHoje() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export default function ExecucoesTaxasOftalmo({ tema, cores }) {
   const [busca, setBusca] = useState("");
-  const [dataInicio, setDataInicio] = useState(dataInicioPadrao);
+  const [dataInicio, setDataInicio] = useState(dataHoje);
   const [dataFim, setDataFim] = useState("");
   const ITENS_POR_PAGINA = 20;
   const [pagina, setPagina] = useState(1);
   const [totais, setTotais] = useState({ nproc: 0, nguias: 0, ntaxas: 0, nproc90262610: 0 });
+  const [topTaxas, setTopTaxas] = useState([]);
 
   const accentColor = tema === "escuro" ? "#FFCB05" : "#FF0073";
 
@@ -45,8 +50,12 @@ export default function ExecucoesTaxasOftalmo({ tema, cores }) {
       .from("execucoes_taxas_oftalmo")
       .select("id, numero_processo, qtd_guias, qtd_taxas, qtd_regra_90262610, codigos_taxas, data_execucao")
       .order("data_execucao", { ascending: false })
-      .limit(1000);
-    if (dataInicio) q = q.gte("data_execucao", dataInicio);
+      .limit(200);
+    if (dataInicio) {
+      q = q.gte("data_execucao", dataInicio);
+    } else if (!dataFim) {
+      q = q.gte("data_execucao", inicioDoDiaISO());
+    }
     if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
     if (signal) q = q.abortSignal(signal);
     const { data, error } = await q;
@@ -81,6 +90,20 @@ export default function ExecucoesTaxasOftalmo({ tema, cores }) {
     return () => { ativo = false; };
   }, [dataInicio, dataFim]);
 
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      const { data, error } = await supabase.rpc("taxas_oftalmo_top_taxas", {
+        d_inicio: dataInicio || null,
+        d_fim: dataFim ? dataFim + "T23:59:59" : null,
+        limite: 10,
+      });
+      if (!ativo || error) return;
+      setTopTaxas(data || []);
+    })();
+    return () => { ativo = false; };
+  }, [dataInicio, dataFim]);
+
   let filtrados = dados;
   if (busca.trim()) {
     filtrados = filtrados.filter((r) =>
@@ -93,19 +116,13 @@ export default function ExecucoesTaxasOftalmo({ tema, cores }) {
   const totalTaxas = totais.ntaxas;
   const totalProcedimento9026 = totais.nproc90262610;
 
-  const taxCount = {};
-  dados.forEach((r) => {
-    Object.entries(r.codigos_taxas || {}).forEach(([codigo, qtd]) => {
-      taxCount[codigo] = (taxCount[codigo] || 0) + qtd;
-    });
-  });
-  const chartData = Object.entries(taxCount)
-    .sort((a, b) => b[1] - a[1])
+  const chartData = topTaxas
     .slice(0, 8)
-    .map(([codigo, valor]) => {
+    .map((t) => {
+      const codigo = t.codigo;
       const nome = TAXA_LABELS[codigo];
       const rotulo = nome ? `${codigo} - ${nome}` : codigo;
-      return { nome: rotulo.length > 45 ? rotulo.slice(0, 45) + "…" : rotulo, valor };
+      return { nome: rotulo.length > 45 ? rotulo.slice(0, 45) + "…" : rotulo, valor: Number(t.qtd) };
     });
 
   const totalPaginas = Math.ceil(filtrados.length / ITENS_POR_PAGINA);

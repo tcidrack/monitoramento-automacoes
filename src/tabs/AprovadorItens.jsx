@@ -15,10 +15,14 @@ function formatarDataHora(iso) {
   );
 }
 
-function dataInicioPadrao() {
+function inicioDoDiaISO() {
   const d = new Date();
-  d.setDate(d.getDate() - 60);
-  return d.toISOString().slice(0, 10);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
+function dataHoje() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export default function AprovadorItens({ tema, cores }) {
@@ -28,7 +32,7 @@ export default function AprovadorItens({ tema, cores }) {
   const [buscaPrestador, setBuscaPrestador] = useState("");
   const [buscaCliente, setBuscaCliente] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("Todos");
-  const [dataInicio, setDataInicio] = useState(dataInicioPadrao);
+  const [dataInicio, setDataInicio] = useState(dataHoje);
   const [dataFim, setDataFim] = useState("");
   const [prestadoresUnicos, setPrestadoresUnicos] = useState([]);
   const [clientesUnicos, setClientesUnicos] = useState([]);
@@ -44,8 +48,12 @@ export default function AprovadorItens({ tema, cores }) {
       .from("aprovador_itens")
       .select("id, cliente, prestador, numero_lote, qtd_itens_aprovados, qtd_itens_glosados, qtd_itens_erro, tempo_gasto_minutos, tempo_gasto_segundos, created_at")
       .order("created_at", { ascending: false })
-      .limit(1000);
-    if (dataInicio) q = q.gte("created_at", dataInicio);
+      .limit(200);
+    if (dataInicio) {
+      q = q.gte("created_at", dataInicio);
+    } else if (!dataFim) {
+      q = q.gte("created_at", inicioDoDiaISO());
+    }
     if (dataFim) q = q.lte("created_at", dataFim + "T23:59:59");
     if (buscaPrestador) q = q.eq("prestador", buscaPrestador);
     if (buscaCliente) q = q.eq("cliente", buscaCliente);
@@ -65,6 +73,18 @@ export default function AprovadorItens({ tema, cores }) {
   );
 
   useEffect(() => {
+    const KEY = "aprovador_dropdowns_cache";
+    const cached = localStorage.getItem(KEY);
+    if (cached) {
+      try {
+        const { ts, prest, cli } = JSON.parse(cached);
+        if (Date.now() - ts < 24 * 60 * 60 * 1000) {
+          setPrestadoresUnicos(prest);
+          setClientesUnicos(cli);
+          return;
+        }
+      } catch { /* cache inválido */ }
+    }
     let ativo = true;
     (async () => {
       const { data, error } = await supabase
@@ -76,6 +96,7 @@ export default function AprovadorItens({ tema, cores }) {
       const cli = [...new Set((data || []).map((r) => r.cliente).filter(Boolean))].sort();
       setPrestadoresUnicos(prest);
       setClientesUnicos(cli);
+      localStorage.setItem(KEY, JSON.stringify({ ts: Date.now(), prest, cli }));
     })();
     return () => { ativo = false; };
   }, []);
