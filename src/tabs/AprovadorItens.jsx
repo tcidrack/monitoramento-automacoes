@@ -205,6 +205,11 @@ export default function AprovadorItens({ tema, cores }) {
       {/* CARDS */}
       <div className="cards">
         <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer'  }}>
+          <h3>Total de Lotes</h3>
+          <p>{totais.nlotes.toLocaleString("pt-BR")}</p>
+          <p style={{ fontSize: 13, fontWeight: 400 }}>no período filtrado</p>
+        </div>
+        <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer'  }}>
           <h3>Itens Aprovados</h3>
           <p style={{ color: COLOR_APROV }}>{totalAprov.toLocaleString("pt-BR")}</p>
         </div>
@@ -246,44 +251,54 @@ export default function AprovadorItens({ tema, cores }) {
       {/* FILTROS */}
       <div className="filtro">
         <div className="linha-filtros">
-          <label>Lote:</label>
-          <input
-            className="filtro-processo"
-            type="text"
-            placeholder="Buscar lote"
-            value={buscaLote}
-            onChange={(e) => setBuscaLote(e.target.value)}
-          />
-          <label>Cliente:</label>
-          <select
-            value={buscaCliente}
-            onChange={(e) => setBuscaCliente(e.target.value)}
-          >
-            <option value="">Todos</option>
-            {clientesUnicos.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-          <label>Prestador:</label>
-          <select
-            value={buscaPrestador}
-            onChange={(e) => setBuscaPrestador(e.target.value)}
-          >
-            <option value="">Todos</option>
-            {prestadoresUnicos.map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-          <label>Status:</label>
-          <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)}>
-            {["Todos", "Aprovados", "Glosados", "Erro do sistema"].map((s) => <option key={s}>{s}</option>)}
-          </select>
+          <div className="grupo-filtro">
+            <label>Lote:</label>
+            <input
+              className="filtro-processo"
+              type="text"
+              placeholder="Buscar lote"
+              value={buscaLote}
+              onChange={(e) => setBuscaLote(e.target.value)}
+            />
+          </div>
+          <div className="grupo-filtro">
+            <label>Cliente:</label>
+            <select
+              value={buscaCliente}
+              onChange={(e) => setBuscaCliente(e.target.value)}
+            >
+              <option value="">Todos</option>
+              {clientesUnicos.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+          <div className="grupo-filtro">
+            <label>Prestador:</label>
+            <select
+              value={buscaPrestador}
+              onChange={(e) => setBuscaPrestador(e.target.value)}
+            >
+              <option value="">Todos</option>
+              {prestadoresUnicos.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+          <div className="grupo-filtro">
+            <label>Status:</label>
+            <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)}>
+              {["Todos", "Aprovados", "Glosados", "Erro do sistema"].map((s) => <option key={s}>{s}</option>)}
+            </select>
+          </div>
         </div>
         <div className="linha-filtros">
-          <label>Período:</label>
-          <input className="filtro-data" type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
-          <span className="ate-text">até</span>
-          <input className="filtro-data" type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
+          <div className="grupo-filtro">
+            <label>Período:</label>
+            <input className="filtro-data" type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
+            <span className="ate-text">até</span>
+            <input className="filtro-data" type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
+          </div>
           <button
             className="btn-tema"
             onClick={() => { setBuscaLote(""); setBuscaPrestador(""); setBuscaCliente(""); setFiltroStatus("Todos"); setDataInicio(""); setDataFim(""); }}

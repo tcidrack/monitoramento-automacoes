@@ -1,22 +1,14 @@
 import { useState, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
 import { dataHojeBR } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
 
-const TAXA_LABELS = {
-  "60026200": "Campimetria",
-  "60027886": "Retinografia",
-  "60027525": "Paquimetria",
-  "70040150": "Biometria",
-  "60027436": "Microscopia Especular",
-  "90262610": "Angiofluoresceinografia Monocular",
-};
-
 function formatarDataHora(iso) {
   if (!iso) return "—";
-  const d = new Date(iso.endsWith("Z") ? iso : iso + "Z");
+  // Supabase retorna TIMESTAMPTZ com offset (+00:00); new Date() aceita ISO 8601 com offset nativamente
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
   return (
     `${String(d.getDate()).padStart(2, "0")}/` +
     `${String(d.getMonth() + 1).padStart(2, "0")}/` +
@@ -31,21 +23,27 @@ function inicioDoDiaISO() {
   return d.toISOString();
 }
 
-export default function ExecucoesTaxasOftalmo({ tema, cores }) {
+const RESULTADO_LABEL = {
+  enviado_tela_60: "Enviado à Tela 60",
+  pendencia_gerada: "Pendência Gerada",
+};
+
+export default function VerificacaoAnexos({ tema, cores }) {
   const [busca, setBusca] = useState("");
   const [dataInicio, setDataInicio] = useState(dataHojeBR);
   const [dataFim, setDataFim] = useState("");
   const ITENS_POR_PAGINA = 20;
   const [pagina, setPagina] = useState(1);
-  const [totais, setTotais] = useState({ nproc: 0, nguias: 0, ntaxas: 0, nproc90262610: 0 });
-  const [topTaxas, setTopTaxas] = useState([]);
+  const [totais, setTotais] = useState({ total: 0, comAnexo: 0, semAnexo: 0 });
 
   const accentColor = tema === "escuro" ? "#FFCB05" : "#FF0073";
+  const COLOR_COM = tema === "escuro" ? "#34d399" : "#059669";
+  const COLOR_SEM = tema === "escuro" ? "#f87171" : "#dc2626";
 
-  const fetchExecucoes = useCallback(async (signal) => {
+  const fetchGuias = useCallback(async (signal) => {
     let q = supabase
-      .from("execucoes_taxas_oftalmo")
-      .select("id, numero_processo, qtd_guias, qtd_taxas, qtd_regra_90262610, codigos_taxas, data_execucao")
+      .from("verificacao_anexos")
+      .select("id, numero_guia, tem_anexo, resultado, data_execucao")
       .order("data_execucao", { ascending: false })
       .limit(200);
     if (dataInicio) {
@@ -61,7 +59,7 @@ export default function ExecucoesTaxasOftalmo({ tema, cores }) {
   }, [dataInicio, dataFim]);
 
   const { data: dados, loading } = usePollingFetch(
-    fetchExecucoes,
+    fetchGuias,
     120000,
     [dataInicio, dataFim]
   );
@@ -69,34 +67,27 @@ export default function ExecucoesTaxasOftalmo({ tema, cores }) {
   useEffect(() => {
     let ativo = true;
     (async () => {
-      let q = supabase
-        .from("execucoes_taxas_oftalmo")
-        .select("nproc:id.count(), nguias:qtd_guias.sum(), ntaxas:qtd_taxas.sum(), nproc90262610:qtd_regra_90262610.sum()");
-      if (dataInicio) q = q.gte("data_execucao", dataInicio);
-      if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
-      const { data, error } = await q;
-      if (!ativo || error) return;
-      const t = data?.[0] || {};
-      setTotais({
-        nproc: t.nproc || 0,
-        nguias: t.nguias || 0,
-        ntaxas: t.ntaxas || 0,
-        nproc90262610: t.nproc90262610 || 0,
-      });
-    })();
-    return () => { ativo = false; };
-  }, [dataInicio, dataFim]);
-
-  useEffect(() => {
-    let ativo = true;
-    (async () => {
-      const { data, error } = await supabase.rpc("taxas_oftalmo_top_taxas", {
-        d_inicio: dataInicio || null,
-        d_fim: dataFim ? dataFim + "T23:59:59" : null,
-        limite: 10,
-      });
-      if (!ativo || error) return;
-      setTopTaxas(data || []);
+      function buildQ(filtroAnexo) {
+        let q = supabase
+          .from("verificacao_anexos")
+          .select("*", { count: "exact", head: true });
+        if (dataInicio) {
+          q = q.gte("data_execucao", dataInicio);
+        } else if (!dataFim) {
+          q = q.gte("data_execucao", inicioDoDiaISO());
+        }
+        if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+        if (filtroAnexo != null) q = q.eq("tem_anexo", filtroAnexo);
+        return q;
+      }
+      const [totalRes, comAnexoRes] = await Promise.all([
+        buildQ(),
+        buildQ(true),
+      ]);
+      if (!ativo) return;
+      const total    = totalRes.count ?? 0;
+      const comAnexo = comAnexoRes.count ?? 0;
+      setTotais({ total, comAnexo, semAnexo: total - comAnexo });
     })();
     return () => { ativo = false; };
   }, [dataInicio, dataFim]);
@@ -104,23 +95,16 @@ export default function ExecucoesTaxasOftalmo({ tema, cores }) {
   let filtrados = dados;
   if (busca.trim()) {
     filtrados = filtrados.filter((r) =>
-      (r.numero_processo || "").toLowerCase().includes(busca.trim().toLowerCase())
+      (r.numero_guia || "").toLowerCase().includes(busca.trim().toLowerCase())
     );
   }
 
-  const totalProcessos = totais.nproc;
-  const totalGuias = totais.nguias;
-  const totalTaxas = totais.ntaxas;
-  const totalProcedimento9026 = totais.nproc90262610;
-
-  const chartData = topTaxas
-    .slice(0, 8)
-    .map((t) => {
-      const codigo = t.codigo;
-      const nome = TAXA_LABELS[codigo];
-      const rotulo = nome ? `${codigo} - ${nome}` : codigo;
-      return { nome: rotulo.length > 45 ? rotulo.slice(0, 45) + "…" : rotulo, valor: Number(t.qtd) };
-    });
+  const pctComAnexo = totais.total > 0
+    ? ((totais.comAnexo / totais.total) * 100).toFixed(1)
+    : "0.0";
+  const pctSemAnexo = totais.total > 0
+    ? ((totais.semAnexo / totais.total) * 100).toFixed(1)
+    : "0.0";
 
   const totalPaginas = Math.ceil(filtrados.length / ITENS_POR_PAGINA);
   const paginaSegura = Math.min(Math.max(1, pagina), Math.max(1, totalPaginas));
@@ -147,77 +131,52 @@ export default function ExecucoesTaxasOftalmo({ tema, cores }) {
 
   function exportarExcel() {
     const ws = XLSX.utils.aoa_to_sheet([
-      ["", "", "", "Total de processos", totalProcessos],
-      ["", "", "", "Total de guias (filtrado)", totalGuias],
-      ["", "", "", "Total de taxas (filtrado)", totalTaxas],
-      ["", "", "", "Total do Procedimento 90262610 ANGIOFLUORESCEINOGRAFIA", totalProcedimento9026],
+      ["", "", "Total de guias processadas", totais.total],
+      ["", "", "Com anexo (enviadas à Tela 60)", totais.comAnexo],
+      ["", "", "Sem anexo (pendência gerada)", totais.semAnexo],
       [],
-      ["Nº do Processo", "Qtd. Guias", "Qtd. Taxas", "Códigos de Taxa", "Procedimento 90262610 ANGIOFLUORESCEINOGRAFIA", "Data de Execução"],
+      ["Nº da Guia", "Resultado", "Data de Execução"],
       ...filtrados.map((r) => [
-        r.numero_processo,
-        r.qtd_guias,
-        r.qtd_taxas,
-        Object.keys(r.codigos_taxas || {}).length,
-        r.qtd_regra_90262610 ?? 0,
+        r.numero_guia,
+        RESULTADO_LABEL[r.resultado] ?? r.resultado,
         formatarDataHora(r.data_execucao),
       ]),
     ]);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Taxas Oftalmo");
-    XLSX.writeFile(wb, "execucoes_taxas_oftalmo.xlsx");
+    XLSX.utils.book_append_sheet(wb, ws, "Verificação de Anexos");
+    XLSX.writeFile(wb, "verificacao_anexos.xlsx");
   }
 
   return (
     <>
       {/* CARDS */}
       <div className="cards">
-        <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
-          <h3>Total de Processos</h3>
-          <p>{totalProcessos.toLocaleString("pt-BR")}</p>
+        <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: "pointer" }}>
+          <h3>Total de Guias Processadas</h3>
+          <p>{totais.total.toLocaleString("pt-BR")}</p>
+          <p style={{ fontSize: 13, fontWeight: 400 }}>no período filtrado</p>
         </div>
-        <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
-          <h3>Total de Guias</h3>
-          <p>{totalGuias.toLocaleString("pt-BR")}</p>
-          <p style={{ fontSize: 13, fontWeight: 400 }}>nos registros filtrados</p>
+        <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: "pointer" }}>
+          <h3>Com Anexo</h3>
+          <p style={{ color: COLOR_COM }}>{totais.comAnexo.toLocaleString("pt-BR")}</p>
+          <p style={{ fontSize: 13, fontWeight: 400 }}>{pctComAnexo}% — enviadas à Tela 60</p>
         </div>
-        <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
-          <h3>Total de Taxas</h3>
-          <p>{totalTaxas.toLocaleString("pt-BR")}</p>
-          <p style={{ fontSize: 13, fontWeight: 400 }}>nos registros filtrados</p>
-        </div>
-        <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
-          <h3>Procedimento ANGIOFLUORESCEINOGRAFIA</h3>
-          <p>{totalProcedimento9026.toLocaleString("pt-BR")}</p>
-          <p style={{ fontSize: 13, fontWeight: 400 }}>nos registros filtrados</p>
+        <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: "pointer" }}>
+          <h3>Sem Anexo</h3>
+          <p style={{ color: COLOR_SEM }}>{totais.semAnexo.toLocaleString("pt-BR")}</p>
+          <p style={{ fontSize: 13, fontWeight: 400 }}>{pctSemAnexo}% — pendência gerada</p>
         </div>
       </div>
-
-      {/* GRÁFICO */}
-      {chartData.length > 0 && (
-        <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
-          <h3>Top Códigos de Taxa Mais Frequentes</h3>
-          <div style={{ width: "100%", height: 250 }}>
-            <ResponsiveContainer>
-              <BarChart data={chartData} layout="vertical">
-                <XAxis type="number" stroke={cores.texto} tick={{ fontSize: 11 }} />
-                <YAxis type="category" dataKey="nome" width={300} stroke={cores.texto} tick={{ fontSize: 11 }} />
-                <Tooltip contentStyle={{ fontSize: 12 }} />
-                <Bar dataKey="valor" fill={accentColor} name="Ocorrências" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
 
       {/* FILTROS */}
       <div className="filtro">
         <div className="linha-filtros">
           <div className="grupo-filtro">
-            <label>Nº do Processo:</label>
+            <label>Nº da Guia:</label>
             <input
               className="filtro-processo"
               type="text"
-              placeholder="Buscar processo"
+              placeholder="Buscar guia"
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
             />
@@ -241,35 +200,42 @@ export default function ExecucoesTaxasOftalmo({ tema, cores }) {
       {/* TABELA */}
       <div className="tabela-container" style={{ backgroundColor: cores.card, color: cores.texto, marginTop: "20px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid rgba(128,128,128,0.2)" }}>
-          <h3 style={{ margin: 0 }}>Detalhamento</h3>
+          <h3 style={{ margin: 0 }}>Detalhamento por Guia</h3>
           <span style={{ fontSize: "13px", opacity: 0.8 }}>
-            Mostrando {inicio + 1}—{Math.min(inicio + ITENS_POR_PAGINA, filtrados.length)} de {filtrados.length.toLocaleString("pt-BR")}
+            Mostrando {filtrados.length === 0 ? 0 : inicio + 1}—{Math.min(inicio + ITENS_POR_PAGINA, filtrados.length)} de {filtrados.length.toLocaleString("pt-BR")}
           </span>
         </div>
         <div style={{ overflowX: "auto" }}>
           <table>
             <thead>
               <tr>
-                <th style={{ color: cores.texto }}>Nº do Processo</th>
-                <th style={{ color: cores.texto }}>Qtd. Guias</th>
-                <th style={{ color: cores.texto }}>Qtd. Taxas</th>
-                <th style={{ color: cores.texto }}>Códigos de Taxa</th>
-                <th style={{ color: cores.texto }}>Procedimento ANGIOFLUORESCEINOGRAFIA</th>
+                <th style={{ color: cores.texto }}>Nº da Guia</th>
+                <th style={{ color: cores.texto }}>Resultado</th>
                 <th style={{ color: cores.texto }}>Data de Execução</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} style={{ color: cores.texto, padding: 32 }}>Carregando...</td></tr>
+                <tr><td colSpan={3} style={{ color: cores.texto, padding: 32 }}>Carregando...</td></tr>
               ) : filtrados.length === 0 ? (
-                <tr><td colSpan={6} style={{ color: cores.texto, padding: 32 }}>Nenhum registro encontrado.</td></tr>
+                <tr><td colSpan={3} style={{ color: cores.texto, padding: 32 }}>Nenhum registro encontrado.</td></tr>
               ) : paginaDados.map((r, i) => (
                 <tr key={i}>
-                  <td style={{ color: cores.texto }}>{r.numero_processo}</td>
-                  <td style={{ color: cores.texto }}>{r.qtd_guias}</td>
-                  <td style={{ color: cores.texto }}>{r.qtd_taxas}</td>
-                  <td style={{ color: cores.texto }}>{Object.keys(r.codigos_taxas || {}).length}</td>
-                  <td style={{ color: cores.texto }}>{r.qtd_regra_90262610 ?? 0}</td>
+                  <td style={{ color: cores.texto }}>{r.numero_guia}</td>
+                  <td style={{ color: cores.texto }}>
+                    <span style={{
+                      padding: "2px 8px",
+                      borderRadius: "12px",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      backgroundColor: r.tem_anexo ? "#16a34a22" : "#dc262622",
+                      color: r.tem_anexo
+                        ? (tema === "escuro" ? "#4ade80" : "#16a34a")
+                        : (tema === "escuro" ? "#f87171" : "#dc2626"),
+                    }}>
+                      {RESULTADO_LABEL[r.resultado] ?? r.resultado}
+                    </span>
+                  </td>
                   <td style={{ color: cores.texto }}>{formatarDataHora(r.data_execucao)}</td>
                 </tr>
               ))}

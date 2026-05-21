@@ -366,6 +366,13 @@ td {
   flex-wrap: wrap;
 }
 
+/* Agrupa label + campo para nunca quebrarem separados */
+.grupo-filtro {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* ===== RESPONSIVO ===== */
 @media (max-width: 826px) {
   .header {

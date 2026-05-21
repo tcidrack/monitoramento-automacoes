@@ -134,7 +134,21 @@ export default function Regulacoes({ tema, cores }) {
 
   const totalGuias = totalGuiasServer;
   const totalProc = topProc.reduce((acc, p) => acc + Number(p.qtd || 0), 0);
-  const media = totalGuias > 0 ? (totalProc / totalGuias).toFixed(1) : "0";
+
+  // Média de tempo entre guias consecutivas — gaps > 10 min excluídos (automação pausada)
+  const LIMIAR_GAP_MS = 10 * 60 * 1000;
+  const mediaTempoGuia = (() => {
+    if (dados.length < 2) return null;
+    const sorted = [...dados].sort((a, b) => new Date(a.data_execucao) - new Date(b.data_execucao));
+    const gaps = [];
+    for (let i = 1; i < sorted.length; i++) {
+      gaps.push(new Date(sorted[i].data_execucao) - new Date(sorted[i - 1].data_execucao));
+    }
+    const validos = gaps.filter((g) => g <= LIMIAR_GAP_MS);
+    if (validos.length === 0) return null;
+    const avgSec = validos.reduce((a, b) => a + b, 0) / validos.length / 1000;
+    return avgSec < 60 ? `${avgSec.toFixed(1)} seg` : `${(avgSec / 60).toFixed(1)} min`;
+  })();
 
   const chartData = topProc
     .slice(0, 8)
@@ -200,8 +214,9 @@ export default function Regulacoes({ tema, cores }) {
           <p>{totalProc.toLocaleString("pt-BR")}</p>
         </div>
         <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
-          <h3>Média por Guia</h3>
-          <p>{media} proc.</p>
+          <h3>Tempo Médio entre Guias</h3>
+          <p>{mediaTempoGuia ?? "—"}</p>
+          <p style={{ fontSize: 13, fontWeight: 400 }}>intervalo médio de processamento</p>
         </div>
       </div>
 
@@ -225,39 +240,45 @@ export default function Regulacoes({ tema, cores }) {
       {/* FILTROS */}
       <div className="filtro">
         <div className="linha-filtros">
-          <label>Nº da Guia:</label>
-          <input
-            className="filtro-processo"
-            type="text"
-            placeholder="Buscar número da guia"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-          />
-          <label>Regra:</label>
-          <select
-            className="filtro-processo"
-            value={regraFiltro}
-            onChange={(e) => setRegraFiltro(e.target.value)}
-          >
-            <option value="">Todas</option>
-            {regrasUnicas.map((r) => (
-              <option key={r} value={r}>{r.replace(/_/g, " ")}</option>
-            ))}
-          </select>
-          <label>Período:</label>
-          <input
-            className="filtro-data"
-            type="date"
-            value={dataInicio}
-            onChange={(e) => setDataInicio(e.target.value)}
-          />
-          <span className="ate-text">até</span>
-          <input
-            className="filtro-data"
-            type="date"
-            value={dataFim}
-            onChange={(e) => setDataFim(e.target.value)}
-          />
+          <div className="grupo-filtro">
+            <label>Nº da Guia:</label>
+            <input
+              className="filtro-processo"
+              type="text"
+              placeholder="Buscar número da guia"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+            />
+          </div>
+          <div className="grupo-filtro">
+            <label>Regra:</label>
+            <select
+              className="filtro-processo"
+              value={regraFiltro}
+              onChange={(e) => setRegraFiltro(e.target.value)}
+            >
+              <option value="">Todas</option>
+              {regrasUnicas.map((r) => (
+                <option key={r} value={r}>{r.replace(/_/g, " ")}</option>
+              ))}
+            </select>
+          </div>
+          <div className="grupo-filtro">
+            <label>Período:</label>
+            <input
+              className="filtro-data"
+              type="date"
+              value={dataInicio}
+              onChange={(e) => setDataInicio(e.target.value)}
+            />
+            <span className="ate-text">até</span>
+            <input
+              className="filtro-data"
+              type="date"
+              value={dataFim}
+              onChange={(e) => setDataFim(e.target.value)}
+            />
+          </div>
           <button
             className="btn-tema"
             onClick={() => { setBusca(""); setDataInicio(""); setDataFim(""); setRegraFiltro(""); }}

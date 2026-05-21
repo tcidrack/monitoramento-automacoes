@@ -189,22 +189,28 @@ export default function ExecucoesRMTC({ tema, cores }) {
       {/* FILTROS */}
       <div className="filtro">
         <div className="linha-filtros">
-          <label>Nº do Processo:</label>
-          <input
-            className="filtro-processo"
-            type="text"
-            placeholder="Buscar processo"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-          />
-          <label>Tipo:</label>
-          <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}>
-            {["Todos", "RM", "TC"].map((t) => <option key={t}>{t}</option>)}
-          </select>
-          <label>Período:</label>
-          <input className="filtro-data" type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
-          <span className="ate-text">até</span>
-          <input className="filtro-data" type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
+          <div className="grupo-filtro">
+            <label>Nº do Processo:</label>
+            <input
+              className="filtro-processo"
+              type="text"
+              placeholder="Buscar processo"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+            />
+          </div>
+          <div className="grupo-filtro">
+            <label>Tipo:</label>
+            <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}>
+              {["Todos", "RM", "TC"].map((t) => <option key={t}>{t}</option>)}
+            </select>
+          </div>
+          <div className="grupo-filtro">
+            <label>Período:</label>
+            <input className="filtro-data" type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
+            <span className="ate-text">até</span>
+            <input className="filtro-data" type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
+          </div>
           <button
             className="btn-tema"
             onClick={() => { setBusca(""); setFiltroTipo("Todos"); setDataInicio(""); setDataFim(""); }}
