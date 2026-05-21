@@ -63,9 +63,35 @@ export default function VerificacaoAnexos({ tema, cores }) {
     [dataInicio, dataFim]
   );
 
-  const comAnexo = dados.filter(r => r.tem_anexo).length;
-  const semAnexo = dados.length - comAnexo;
-  const totais = { total: dados.length, comAnexo, semAnexo };
+  const [totais, setTotais] = useState({ total: 0, comAnexo: 0, semAnexo: 0 });
+
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      function buildQ(filtroAnexo) {
+        let q = supabase
+          .from("verificacao_anexos")
+          .select("*", { count: "exact", head: true });
+        if (dataInicio) {
+          q = q.gte("data_execucao", dataInicio);
+        } else if (!dataFim) {
+          q = q.gte("data_execucao", inicioDoDiaISO());
+        }
+        if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+        if (filtroAnexo != null) q = q.eq("tem_anexo", filtroAnexo);
+        return q;
+      }
+      const [totalRes, comAnexoRes] = await Promise.all([
+        buildQ(),
+        buildQ(true),
+      ]);
+      if (!ativo) return;
+      const total    = totalRes.count ?? 0;
+      const comAnexo = comAnexoRes.count ?? 0;
+      setTotais({ total, comAnexo, semAnexo: total - comAnexo });
+    })();
+    return () => { ativo = false; };
+  }, [dataInicio, dataFim]);
 
   let filtrados = dados;
   if (busca.trim()) {
