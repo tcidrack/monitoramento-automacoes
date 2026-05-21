@@ -46,8 +46,7 @@ export default function ExecucoesTaxasOftalmo({ tema, cores }) {
     let q = supabase
       .from("execucoes_taxas_oftalmo")
       .select("id, numero_processo, qtd_guias, qtd_taxas, qtd_regra_90262610, codigos_taxas, data_execucao")
-      .order("data_execucao", { ascending: false })
-      .limit(200);
+      .order("data_execucao", { ascending: false });
     if (dataInicio) {
       q = q.gte("data_execucao", dataInicio);
     } else if (!dataFim) {

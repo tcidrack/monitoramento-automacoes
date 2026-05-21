@@ -41,8 +41,7 @@ export default function ExecucoesRMTC({ tema, cores }) {
     let q = supabase
       .from("execucoes_rmtc")
       .select("id, numero_processo, tipo, quantidade_guias, data_execucao")
-      .order("data_execucao", { ascending: false })
-      .limit(200);
+      .order("data_execucao", { ascending: false });
     if (dataInicio) {
       q = q.gte("data_execucao", dataInicio);
     } else if (!dataFim) {

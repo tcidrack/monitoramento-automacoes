@@ -44,8 +44,7 @@ export default function AprovadorItens({ tema, cores }) {
     let q = supabase
       .from("aprovador_itens")
       .select("id, cliente, prestador, numero_lote, qtd_itens_aprovados, qtd_itens_glosados, qtd_itens_erro, tempo_gasto_minutos, tempo_gasto_segundos, created_at")
-      .order("created_at", { ascending: false })
-      .limit(200);
+      .order("created_at", { ascending: false });
     if (dataInicio) {
       q = q.gte("created_at", dataInicio);
     } else if (!dataFim) {

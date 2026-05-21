@@ -399,6 +399,7 @@ td {
 @media (max-width: 768px) {
   .linha-filtros {
     align-items: flex-start;
+    flex-direction: column;
   }
 
   .linha-filtros label {
@@ -406,9 +407,18 @@ td {
     font-weight: bold;
   }
 
-  .linha-filtros select,
-  .linha-filtros input,
-  .linha-filtros button {
+  .grupo-filtro {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .grupo-filtro input,
+  .grupo-filtro select {
+    flex: 1;
+    min-width: 120px;
+  }
+
+  .linha-filtros > .btn-tema {
     width: 100%;
   }
 

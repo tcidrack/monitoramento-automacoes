@@ -32,9 +32,9 @@ export default function VerificacaoAnexos({ tema, cores }) {
   const [busca, setBusca] = useState("");
   const [dataInicio, setDataInicio] = useState(dataHojeBR);
   const [dataFim, setDataFim] = useState("");
+  const [filtroResultado, setFiltroResultado] = useState("");
   const ITENS_POR_PAGINA = 20;
   const [pagina, setPagina] = useState(1);
-  const [totais, setTotais] = useState({ total: 0, comAnexo: 0, semAnexo: 0 });
 
   const accentColor = tema === "escuro" ? "#FFCB05" : "#FF0073";
   const COLOR_COM = tema === "escuro" ? "#34d399" : "#059669";
@@ -44,8 +44,7 @@ export default function VerificacaoAnexos({ tema, cores }) {
     let q = supabase
       .from("verificacao_anexos")
       .select("id, numero_guia, tem_anexo, resultado, data_execucao")
-      .order("data_execucao", { ascending: false })
-      .limit(200);
+      .order("data_execucao", { ascending: false });
     if (dataInicio) {
       q = q.gte("data_execucao", dataInicio);
     } else if (!dataFim) {
@@ -64,39 +63,18 @@ export default function VerificacaoAnexos({ tema, cores }) {
     [dataInicio, dataFim]
   );
 
-  useEffect(() => {
-    let ativo = true;
-    (async () => {
-      function buildQ(filtroAnexo) {
-        let q = supabase
-          .from("verificacao_anexos")
-          .select("*", { count: "exact", head: true });
-        if (dataInicio) {
-          q = q.gte("data_execucao", dataInicio);
-        } else if (!dataFim) {
-          q = q.gte("data_execucao", inicioDoDiaISO());
-        }
-        if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
-        if (filtroAnexo != null) q = q.eq("tem_anexo", filtroAnexo);
-        return q;
-      }
-      const [totalRes, comAnexoRes] = await Promise.all([
-        buildQ(),
-        buildQ(true),
-      ]);
-      if (!ativo) return;
-      const total    = totalRes.count ?? 0;
-      const comAnexo = comAnexoRes.count ?? 0;
-      setTotais({ total, comAnexo, semAnexo: total - comAnexo });
-    })();
-    return () => { ativo = false; };
-  }, [dataInicio, dataFim]);
+  const comAnexo = dados.filter(r => r.tem_anexo).length;
+  const semAnexo = dados.length - comAnexo;
+  const totais = { total: dados.length, comAnexo, semAnexo };
 
   let filtrados = dados;
   if (busca.trim()) {
     filtrados = filtrados.filter((r) =>
       (r.numero_guia || "").toLowerCase().includes(busca.trim().toLowerCase())
     );
+  }
+  if (filtroResultado) {
+    filtrados = filtrados.filter((r) => r.resultado === filtroResultado);
   }
 
   const pctComAnexo = totais.total > 0
@@ -127,7 +105,7 @@ export default function VerificacaoAnexos({ tema, cores }) {
     setPagina(Math.min(Math.max(1, p), totalPaginas));
   }
 
-  useEffect(() => { setPagina(1); }, [busca, dataInicio, dataFim]);
+  useEffect(() => { setPagina(1); }, [busca, dataInicio, dataFim, filtroResultado]);
 
   function exportarExcel() {
     const ws = XLSX.utils.aoa_to_sheet([
@@ -187,9 +165,21 @@ export default function VerificacaoAnexos({ tema, cores }) {
             <span className="ate-text">até</span>
             <input className="filtro-data" type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
           </div>
+          <div className="grupo-filtro">
+            <label>Resultado:</label>
+            <select
+              className="filtro-processo"
+              value={filtroResultado}
+              onChange={(e) => setFiltroResultado(e.target.value)}
+            >
+              <option value="">Todos</option>
+              <option value="enviado_tela_60">Com Anexo — Tela 60</option>
+              <option value="pendencia_gerada">Sem Anexo — Pendência</option>
+            </select>
+          </div>
           <button
             className="btn-tema"
-            onClick={() => { setBusca(""); setDataInicio(""); setDataFim(""); }}
+            onClick={() => { setBusca(""); setDataInicio(""); setDataFim(""); setFiltroResultado(""); }}
           >
             <span className="material-symbols-outlined">mop</span>
             Limpar Filtros

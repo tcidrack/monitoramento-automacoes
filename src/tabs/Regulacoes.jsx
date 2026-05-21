@@ -49,8 +49,7 @@ export default function Regulacoes({ tema, cores }) {
     let q = supabase
       .from("regulacoes")
       .select("id, numero_guia, procedimentos, regra_aplicada, data_execucao")
-      .order("data_execucao", { ascending: false })
-      .limit(200);
+      .order("data_execucao", { ascending: false });
     if (dataInicio) {
       q = q.gte("data_execucao", dataInicio);
     } else if (!dataFim) {
