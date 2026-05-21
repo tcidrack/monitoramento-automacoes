@@ -5,7 +5,7 @@ import Regulacoes from "./tabs/Regulacoes";
 import ExecucoesRMTC from "./tabs/ExecucoesRMTC";
 import AprovadorItens from "./tabs/AprovadorItens";
 import ExecucoesTaxasOftalmo from "./tabs/ExecucoesTaxasOftalmo";
-import VerificacaoAnexos from "./tabs/VerificacaoAnexos";
+import Triagem from "./tabs/Triagem";
 
 function Loader({ cor }) {
   return (
@@ -31,7 +31,7 @@ const ABAS = [
   { path: "rmtc",          label: "Deflator RM/TC",     icon: "percent_discount" },
   { path: "aprovador",     label: "Aprovador de Itens", icon: "check_circle" },
   { path: "regulacoes",    label: "Regulações",         icon: "assignment" },
-  { path: "verificacao-anexos", label: "Verificação de Anexos", icon: "attach_file" },
+  { path: "triagem", label: "Triagem", icon: "attach_file" },
 ];
 
 export default function App() {
@@ -106,7 +106,7 @@ export default function App() {
         <Route path="/rmtc"          element={<ExecucoesRMTC tema={tema} cores={coresAtivas} />} />
         <Route path="/aprovador"     element={<AprovadorItens tema={tema} cores={coresAtivas} />} />
         <Route path="/taxas-oftalmo"       element={<ExecucoesTaxasOftalmo tema={tema} cores={coresAtivas} />} />
-        <Route path="/verificacao-anexos" element={<VerificacaoAnexos    tema={tema} cores={coresAtivas} />} />
+        <Route path="/triagem" element={<Triagem tema={tema} cores={coresAtivas} />} />
         <Route path="*" element={<Navigate to="/taxas-oftalmo" replace />} />
       </Routes>
     </div>

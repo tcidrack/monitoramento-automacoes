@@ -28,7 +28,7 @@ const RESULTADO_LABEL = {
   pendencia_gerada: "Pendência Gerada",
 };
 
-export default function VerificacaoAnexos({ tema, cores }) {
+export default function Triagem({ tema, cores }) {
   const [busca, setBusca] = useState("");
   const [dataInicio, setDataInicio] = useState(dataHojeBR);
   const [dataFim, setDataFim] = useState("");
@@ -147,8 +147,8 @@ export default function VerificacaoAnexos({ tema, cores }) {
       ]),
     ]);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Verificação de Anexos");
-    XLSX.writeFile(wb, "verificacao_anexos.xlsx");
+    XLSX.utils.book_append_sheet(wb, ws, "Triagem");
+    XLSX.writeFile(wb, "triagem.xlsx");
   }
 
   return (
