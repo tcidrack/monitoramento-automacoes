@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
+import { dataHojeBR } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
 
 const TAXA_LABELS = {
@@ -30,13 +31,9 @@ function inicioDoDiaISO() {
   return d.toISOString();
 }
 
-function dataHoje() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 export default function ExecucoesTaxasOftalmo({ tema, cores }) {
   const [busca, setBusca] = useState("");
-  const [dataInicio, setDataInicio] = useState(dataHoje);
+  const [dataInicio, setDataInicio] = useState(dataHojeBR);
   const [dataFim, setDataFim] = useState("");
   const ITENS_POR_PAGINA = 20;
   const [pagina, setPagina] = useState(1);

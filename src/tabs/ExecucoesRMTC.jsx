@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
+import { dataHojeBR } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
 
 function formatarDataHora(iso) {
@@ -21,14 +22,10 @@ function inicioDoDiaISO() {
   return d.toISOString();
 }
 
-function dataHoje() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 export default function ExecucoesRMTC({ tema, cores }) {
   const [busca, setBusca] = useState("");
   const [filtroTipo, setFiltroTipo] = useState("Todos");
-  const [dataInicio, setDataInicio] = useState(dataHoje);
+  const [dataInicio, setDataInicio] = useState(dataHojeBR);
   const [dataFim, setDataFim] = useState("");
   const [totalRM, setTotalRM] = useState(0);
   const [totalTC, setTotalTC] = useState(0);

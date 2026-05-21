@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
+import { dataHojeBR } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
 
 function formatarDataHora(iso) {
@@ -21,10 +22,6 @@ function inicioDoDiaISO() {
   return d.toISOString();
 }
 
-function dataHoje() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 export default function AprovadorItens({ tema, cores }) {
   const ITENS_POR_PAGINA = 20;
   const [pagina, setPagina] = useState(1);
@@ -32,7 +29,7 @@ export default function AprovadorItens({ tema, cores }) {
   const [buscaPrestador, setBuscaPrestador] = useState("");
   const [buscaCliente, setBuscaCliente] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("Todos");
-  const [dataInicio, setDataInicio] = useState(dataHoje);
+  const [dataInicio, setDataInicio] = useState(dataHojeBR);
   const [dataFim, setDataFim] = useState("");
   const [prestadoresUnicos, setPrestadoresUnicos] = useState([]);
   const [clientesUnicos, setClientesUnicos] = useState([]);
