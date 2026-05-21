@@ -27,9 +27,9 @@ function Loader({ cor }) {
 }
 
 const ABAS = [
+  { path: "taxas-oftalmo",       label: "Taxas Oftalmo",          icon: "visibility" },
   { path: "rmtc",          label: "Deflator RM/TC",     icon: "percent_discount" },
   { path: "aprovador",     label: "Aprovador de Itens", icon: "check_circle" },
-  { path: "taxas-oftalmo",       label: "Taxas Oftalmo",          icon: "visibility" },
   { path: "regulacoes",    label: "Regulações",         icon: "assignment" },
   { path: "verificacao-anexos", label: "Verificação de Anexos", icon: "attach_file" },
 ];
@@ -101,13 +101,13 @@ export default function App() {
 
       {/* CONTEÚDO DA ABA */}
       <Routes>
-        <Route path="/" element={<Navigate to="/regulacoes" replace />} />
+        <Route path="/" element={<Navigate to="/taxas-oftalmo" replace />} />
         <Route path="/regulacoes"    element={<Regulacoes tema={tema} cores={coresAtivas} />} />
         <Route path="/rmtc"          element={<ExecucoesRMTC tema={tema} cores={coresAtivas} />} />
         <Route path="/aprovador"     element={<AprovadorItens tema={tema} cores={coresAtivas} />} />
         <Route path="/taxas-oftalmo"       element={<ExecucoesTaxasOftalmo tema={tema} cores={coresAtivas} />} />
         <Route path="/verificacao-anexos" element={<VerificacaoAnexos    tema={tema} cores={coresAtivas} />} />
-        <Route path="*" element={<Navigate to="/regulacoes" replace />} />
+        <Route path="*" element={<Navigate to="/taxas-oftalmo" replace />} />
       </Routes>
     </div>
   );
