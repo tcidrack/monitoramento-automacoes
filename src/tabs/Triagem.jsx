@@ -47,8 +47,6 @@ export default function Triagem({ tema, cores }) {
       .order("data_execucao", { ascending: false });
     if (dataInicio) {
       q = q.gte("data_execucao", dataInicio);
-    } else if (!dataFim) {
-      q = q.gte("data_execucao", inicioDoDiaISO());
     }
     if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
     if (signal) q = q.abortSignal(signal);
@@ -74,8 +72,6 @@ export default function Triagem({ tema, cores }) {
           .select("*", { count: "exact", head: true });
         if (dataInicio) {
           q = q.gte("data_execucao", dataInicio);
-        } else if (!dataFim) {
-          q = q.gte("data_execucao", inicioDoDiaISO());
         }
         if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
         if (filtroAnexo != null) q = q.eq("tem_anexo", filtroAnexo);
@@ -102,6 +98,20 @@ export default function Triagem({ tema, cores }) {
   if (filtroResultado) {
     filtrados = filtrados.filter((r) => r.resultado === filtroResultado);
   }
+
+  const LIMIAR_GAP_MS = 10 * 60 * 1000;
+  const mediaTempoGuia = (() => {
+    if (dados.length < 2) return null;
+    const sorted = [...dados].sort((a, b) => new Date(a.data_execucao) - new Date(b.data_execucao));
+    const gaps = [];
+    for (let i = 1; i < sorted.length; i++) {
+      gaps.push(new Date(sorted[i].data_execucao) - new Date(sorted[i - 1].data_execucao));
+    }
+    const validos = gaps.filter((g) => g <= LIMIAR_GAP_MS);
+    if (validos.length === 0) return null;
+    const avgSec = validos.reduce((a, b) => a + b, 0) / validos.length / 1000;
+    return avgSec < 60 ? `${avgSec.toFixed(1)} seg` : `${(avgSec / 60).toFixed(1)} min`;
+  })();
 
   const pctComAnexo = totais.total > 0
     ? ((totais.comAnexo / totais.total) * 100).toFixed(1)
@@ -169,6 +179,11 @@ export default function Triagem({ tema, cores }) {
           <h3>Sem Anexo</h3>
           <p style={{ color: COLOR_SEM }}>{totais.semAnexo.toLocaleString("pt-BR")}</p>
           <p style={{ fontSize: 13, fontWeight: 400 }}>{pctSemAnexo}% — pendência gerada</p>
+        </div>
+        <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: "pointer" }}>
+          <h3>Tempo Médio entre Guias</h3>
+          <p>{mediaTempoGuia ?? "—"}</p>
+          <p style={{ fontSize: 13, fontWeight: 400 }}>intervalo médio de processamento</p>
         </div>
       </div>
 
