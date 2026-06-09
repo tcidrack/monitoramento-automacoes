@@ -153,6 +153,22 @@ export default function Regulacoes({ tema, cores }) {
     return avgSec < 60 ? `${avgSec.toFixed(1)} seg` : `${(avgSec / 60).toFixed(1)} min`;
   })();
 
+  // Média de guias processadas por minuto (agrupando data_execucao por minuto)
+  const guiasPorMinuto = (() => {
+    if (dados.length === 0) return null;
+    const buckets = new Map();
+    for (const r of dados) {
+      if (!r.data_execucao) continue;
+      const d = new Date(r.data_execucao);
+      if (isNaN(d.getTime())) continue;
+      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}-${d.getHours()}-${d.getMinutes()}`;
+      buckets.set(key, (buckets.get(key) || 0) + 1);
+    }
+    if (buckets.size === 0) return null;
+    const total = [...buckets.values()].reduce((a, b) => a + b, 0);
+    return (total / buckets.size).toFixed(1);
+  })();
+
   const chartData = topProc
     .slice(0, 8)
     .map((p) => {
@@ -220,6 +236,11 @@ export default function Regulacoes({ tema, cores }) {
           <h3>Tempo Médio entre Guias</h3>
           <p>{mediaTempoGuia ?? "—"}</p>
           <p style={{ fontSize: 13, fontWeight: 400 }}>intervalo médio de processamento</p>
+        </div>
+        <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
+          <h3>Guias por Minuto</h3>
+          <p>{guiasPorMinuto ?? "—"}</p>
+          <p style={{ fontSize: 13, fontWeight: 400 }}>média por minuto ativo</p>
         </div>
       </div>
 
