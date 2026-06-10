@@ -44,8 +44,13 @@ export default function Regulacoes({ tema, cores }) {
   const [regrasUnicas, setRegrasUnicas] = useState([]);
   const [totalGuiasServer, setTotalGuiasServer] = useState(0);
   const [topProc, setTopProc] = useState([]);
+  const [totalPendenteDia, setTotalPendenteDia] = useState(null);
+  const [processadasDia, setProcessadasDia] = useState(0);
   const ITENS_POR_PAGINA = 20;
   const [pagina, setPagina] = useState(1);
+
+  const FILA_GEPRO = "gepro_analise_tecnica";
+  const diaSelecionado = dataInicio || dataHojeBR();
 
   const accentColor = tema === "escuro" ? "#FFCB05" : "#FF0073";
 
@@ -128,6 +133,36 @@ export default function Regulacoes({ tema, cores }) {
     return () => { ativo = false; };
   }, [dataInicio, dataFim, regraFiltro]);
 
+  // Total pendente congelado do início do dia selecionado (fila GEPRO)
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      const { data } = await supabase
+        .from("sistema_totais")
+        .select("total_pendente")
+        .eq("fila", FILA_GEPRO)
+        .eq("dia", diaSelecionado)
+        .maybeSingle();
+      if (!ativo) return;
+      setTotalPendenteDia(data?.total_pendente ?? null);
+    })();
+    return () => { ativo = false; };
+  }, [diaSelecionado]);
+
+  // Guias processadas pela automação no dia selecionado
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      const { count } = await supabase
+        .from("regulacoes")
+        .select("*", { count: "exact", head: true })
+        .gte("data_execucao", diaSelecionado)
+        .lte("data_execucao", diaSelecionado + "T23:59:59");
+      if (ativo) setProcessadasDia(count || 0);
+    })();
+    return () => { ativo = false; };
+  }, [diaSelecionado]);
+
   let filtrados = dados;
   if (busca.trim()) {
     filtrados = filtrados.filter((r) =>
@@ -168,6 +203,12 @@ export default function Regulacoes({ tema, cores }) {
     const total = [...buckets.values()].reduce((a, b) => a + b, 0);
     return (total / buckets.size).toFixed(1);
   })();
+
+  // Cobertura: guias feitas no dia ÷ total congelado do início daquele dia
+  const pctAutomacao = (totalPendenteDia && totalPendenteDia > 0)
+    ? ((processadasDia / totalPendenteDia) * 100).toFixed(1)
+    : null;
+  const diaLabel = diaSelecionado.split("-").reverse().join("/");
 
   const chartData = topProc
     .slice(0, 8)
@@ -241,6 +282,15 @@ export default function Regulacoes({ tema, cores }) {
           <h3>Guias por Minuto</h3>
           <p>{guiasPorMinuto ?? "—"}</p>
           <p style={{ fontSize: 13, fontWeight: 400 }}>média por minuto ativo</p>
+        </div>
+        <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
+          <h3>% Feito pela Automação</h3>
+          <p>{pctAutomacao != null ? `${pctAutomacao}%` : "—"}</p>
+          <p style={{ fontSize: 13, fontWeight: 400 }}>
+            {totalPendenteDia != null
+              ? `${processadasDia.toLocaleString("pt-BR")} de ${totalPendenteDia.toLocaleString("pt-BR")} pendentes · ${diaLabel}`
+              : `sem total do sistema em ${diaLabel}`}
+          </p>
         </div>
       </div>
 

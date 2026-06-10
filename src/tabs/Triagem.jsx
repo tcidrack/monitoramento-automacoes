@@ -33,8 +33,13 @@ export default function Triagem({ tema, cores }) {
   const [dataInicio, setDataInicio] = useState(dataHojeBR);
   const [dataFim, setDataFim] = useState("");
   const [filtroResultado, setFiltroResultado] = useState("");
+  const [totalPendenteDia, setTotalPendenteDia] = useState(null);
+  const [processadasDia, setProcessadasDia] = useState(0);
   const ITENS_POR_PAGINA = 20;
   const [pagina, setPagina] = useState(1);
+
+  const FILA_TRIAGEM = "issec_tela50";
+  const diaSelecionado = dataInicio || dataHojeBR();
 
   const accentColor = tema === "escuro" ? "#FFCB05" : "#FF0073";
   const COLOR_COM = tema === "escuro" ? "#34d399" : "#059669";
@@ -89,6 +94,36 @@ export default function Triagem({ tema, cores }) {
     return () => { ativo = false; };
   }, [dataInicio, dataFim]);
 
+  // Total pendente congelado do início do dia selecionado (fila Tela 50)
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      const { data } = await supabase
+        .from("sistema_totais")
+        .select("total_pendente")
+        .eq("fila", FILA_TRIAGEM)
+        .eq("dia", diaSelecionado)
+        .maybeSingle();
+      if (!ativo) return;
+      setTotalPendenteDia(data?.total_pendente ?? null);
+    })();
+    return () => { ativo = false; };
+  }, [diaSelecionado]);
+
+  // Guias processadas pela automação no dia selecionado
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      const { count } = await supabase
+        .from("verificacao_anexos")
+        .select("*", { count: "exact", head: true })
+        .gte("data_execucao", diaSelecionado)
+        .lte("data_execucao", diaSelecionado + "T23:59:59");
+      if (ativo) setProcessadasDia(count || 0);
+    })();
+    return () => { ativo = false; };
+  }, [diaSelecionado]);
+
   let filtrados = dados;
   if (busca.trim()) {
     filtrados = filtrados.filter((r) =>
@@ -128,6 +163,12 @@ export default function Triagem({ tema, cores }) {
     const total = [...buckets.values()].reduce((a, b) => a + b, 0);
     return (total / buckets.size).toFixed(1);
   })();
+
+  // Cobertura: guias feitas no dia ÷ total congelado do início daquele dia
+  const pctAutomacao = (totalPendenteDia && totalPendenteDia > 0)
+    ? ((processadasDia / totalPendenteDia) * 100).toFixed(1)
+    : null;
+  const diaLabel = diaSelecionado.split("-").reverse().join("/");
 
   const pctComAnexo = totais.total > 0
     ? ((totais.comAnexo / totais.total) * 100).toFixed(1)
@@ -205,6 +246,15 @@ export default function Triagem({ tema, cores }) {
           <h3>Guias por Minuto</h3>
           <p>{guiasPorMinuto ?? "—"}</p>
           <p style={{ fontSize: 13, fontWeight: 400 }}>média por minuto ativo</p>
+        </div>
+        <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: "pointer" }}>
+          <h3>% Feito pela Automação</h3>
+          <p>{pctAutomacao != null ? `${pctAutomacao}%` : "—"}</p>
+          <p style={{ fontSize: 13, fontWeight: 400 }}>
+            {totalPendenteDia != null
+              ? `${processadasDia.toLocaleString("pt-BR")} de ${totalPendenteDia.toLocaleString("pt-BR")} pendentes · ${diaLabel}`
+              : `sem total do sistema em ${diaLabel}`}
+          </p>
         </div>
       </div>
 
