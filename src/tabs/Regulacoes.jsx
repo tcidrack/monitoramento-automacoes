@@ -201,7 +201,7 @@ export default function Regulacoes({ tema, cores }) {
     }
     if (buckets.size === 0) return null;
     const total = [...buckets.values()].reduce((a, b) => a + b, 0);
-    return (total / buckets.size).toFixed(1);
+    return Math.round(total / buckets.size);
   })();
 
   // Cobertura: guias feitas no dia ÷ total congelado do início daquele dia
