@@ -132,6 +132,11 @@ export default function AprovadorItens({ tema, cores }) {
     );
   }
 
+  // Opções dos filtros: lista em cache (24h) + valores já presentes nos dados carregados,
+  // assim um cliente/prestador novo aparece sem esperar o cache expirar (sem custo extra de egress)
+  const clientesOpcoes = [...new Set([...clientesUnicos, ...dados.map((r) => r.cliente)].filter(Boolean))].sort();
+  const prestadoresOpcoes = [...new Set([...prestadoresUnicos, ...dados.map((r) => r.prestador)].filter(Boolean))].sort();
+
   const totalAprov = totais.aprov;
   const totalGlos = totais.glos;
   const totalErro = totais.erro;
@@ -267,7 +272,7 @@ export default function AprovadorItens({ tema, cores }) {
               onChange={(e) => setBuscaCliente(e.target.value)}
             >
               <option value="">Todos</option>
-              {clientesUnicos.map((c) => (
+              {clientesOpcoes.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
@@ -279,7 +284,7 @@ export default function AprovadorItens({ tema, cores }) {
               onChange={(e) => setBuscaPrestador(e.target.value)}
             >
               <option value="">Todos</option>
-              {prestadoresUnicos.map((p) => (
+              {prestadoresOpcoes.map((p) => (
                 <option key={p} value={p}>{p}</option>
               ))}
             </select>
