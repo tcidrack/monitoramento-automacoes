@@ -212,6 +212,10 @@
   border: none;
   margin-right: 8px;
   min-width: 140px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .filtro select,
@@ -221,6 +225,10 @@
   border: none;
   margin-right: 8px;
   min-width: 140px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -364,6 +372,7 @@ td {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  width: 100%;
 }
 
 /* Agrupa label + campo para nunca quebrarem separados */
@@ -371,6 +380,8 @@ td {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* ===== RESPONSIVO ===== */
@@ -416,6 +427,7 @@ td {
   .grupo-filtro select {
     flex: 1;
     min-width: 120px;
+    max-width: 100%;
   }
 
   .linha-filtros > .btn-tema {
