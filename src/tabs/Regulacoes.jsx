@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
-import { dataHojeBR } from "../lib/dateUtils";
+import { dataHojeBR, formatarDuracao } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
 
 const PROC_LABELS = {
@@ -204,6 +204,19 @@ export default function Regulacoes({ tema, cores }) {
     return Math.round(total / buckets.size);
   })();
 
+  // Tempo de operação: janela da 1ª à última guia do período (inclui pausas)
+  const tempoOperacao = (() => {
+    let min = Infinity, max = -Infinity;
+    for (const r of dados) {
+      const t = new Date(r.data_execucao).getTime();
+      if (isNaN(t)) continue;
+      if (t < min) min = t;
+      if (t > max) max = t;
+    }
+    if (max <= min) return null;
+    return formatarDuracao(Math.round((max - min) / 60000));
+  })();
+
   // Cobertura: guias feitas no dia ÷ total congelado do início daquele dia
   const pctAutomacao = (totalPendenteDia && totalPendenteDia > 0)
     ? ((processadasDia / totalPendenteDia) * 100).toFixed(1)
@@ -291,6 +304,11 @@ export default function Regulacoes({ tema, cores }) {
               ? `${processadasDia.toLocaleString("pt-BR")} de ${totalPendenteDia.toLocaleString("pt-BR")} pendentes · ${diaLabel}`
               : `sem total do sistema em ${diaLabel}`}
           </p>
+        </div>
+        <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
+          <h3>Tempo de Operação</h3>
+          <p>{tempoOperacao ?? "—"}</p>
+          <p style={{ fontSize: 13, fontWeight: 400 }}>da 1ª à última guia do período</p>
         </div>
       </div>
 

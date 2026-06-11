@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
-import { dataHojeBR } from "../lib/dateUtils";
+import { dataHojeBR, formatarDuracao } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
 
 function formatarDataHora(iso) {
@@ -148,6 +148,7 @@ export default function AprovadorItens({ tema, cores }) {
   const totalSeg = totais.tseg;
   const tempoTotal = totalMin + Math.floor(totalSeg / 60);
   const avgTempo = totais.nlotes > 0 ? (tempoTotal / totais.nlotes).toFixed(1) : "0";
+  const tempoTrabalhadoFmt = formatarDuracao(tempoTotal);
 
   const chartData = [
     { nome: "Aprovados", valor: totalAprov },
@@ -234,6 +235,11 @@ export default function AprovadorItens({ tema, cores }) {
           <h3>Tempo Médio por Lote</h3>
           <p>{avgTempo} min</p>
           <p style={{ fontSize: 13, fontWeight: 400 }}>{tempoTotal.toLocaleString("pt-BR")} min economizados</p>
+        </div>
+        <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer'  }}>
+          <h3>Tempo de Operação</h3>
+          <p>{tempoTrabalhadoFmt ?? "—"}</p>
+          <p style={{ fontSize: 13, fontWeight: 400 }}>tempo total trabalhado nos lotes</p>
         </div>
       </div>
 
