@@ -47,6 +47,11 @@ const PROC_LABELS = {
   "28050770":  "TESTOSTERONA LIVRE",
 };
 
+function formatarRegra(regra) {
+  if (!regra) return "—";
+  return PROC_LABELS[regra] || regra.replace(/_/g, " ");
+}
+
 function formatarDataHora(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -293,7 +298,7 @@ export default function Regulacoes({ tema, cores }) {
       ...filtrados.map((r) => [
         r.numero_guia || "—",
         r.procedimentos?.length ?? 0,
-        r.regra_aplicada || "",
+        formatarRegra(r.regra_aplicada),
         formatarDataHora(r.data_execucao),
       ]),
     ]);
@@ -379,7 +384,7 @@ export default function Regulacoes({ tema, cores }) {
             >
               <option value="">Todas</option>
               {regrasUnicas.map((r) => (
-                <option key={r} value={r}>{r.replace(/_/g, " ")}</option>
+                <option key={r} value={r}>{formatarRegra(r)}</option>
               ))}
             </select>
           </div>
@@ -436,7 +441,7 @@ export default function Regulacoes({ tema, cores }) {
                 <tr key={i}>
                   <td style={{ color: cores.texto }}>{r.numero_guia || "—"}</td>
                   <td style={{ color: cores.texto }}>{r.procedimentos?.length ?? 0}</td>
-                  <td style={{ color: cores.texto }}>{r.regra_aplicada ? r.regra_aplicada.replace(/_/g, " ") : "—"}</td>
+                  <td style={{ color: cores.texto }}>{formatarRegra(r.regra_aplicada)}</td>
                   <td style={{ color: cores.texto }}>{formatarDataHora(r.data_execucao)}</td>
                 </tr>
               ))}
