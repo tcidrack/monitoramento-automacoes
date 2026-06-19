@@ -152,22 +152,6 @@ export default function InformativosFaturamento({ tema, cores }) {
       <div className="filtro">
         <div className="linha-filtros">
           <div className="grupo-filtro">
-            <label>Buscar:</label>
-            <input
-              className="filtro-processo"
-              type="text"
-              placeholder="CNPJ, Lote ou NUP"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-            />
-          </div>
-          <div className="grupo-filtro">
-            <label>Período:</label>
-            <input className="filtro-data" type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
-            <span className="ate-text">até</span>
-            <input className="filtro-data" type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
-          </div>
-          <div className="grupo-filtro">
             <label>Cliente:</label>
             <select
               className="filtro-processo"
@@ -192,6 +176,22 @@ export default function InformativosFaturamento({ tema, cores }) {
                 <option key={p} value={p}>{p}</option>
               ))}
             </select>
+          </div>
+          <div className="grupo-filtro">
+            <label>Buscar:</label>
+            <input
+              className="filtro-processo"
+              type="text"
+              placeholder="CNPJ, Lote ou NUP"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+            />
+          </div>
+          <div className="grupo-filtro">
+            <label>Período:</label>
+            <input className="filtro-data" type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
+            <span className="ate-text">até</span>
+            <input className="filtro-data" type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
           </div>
           <button
             className="btn-tema"
