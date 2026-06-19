@@ -52,6 +52,25 @@ function formatarRegra(regra) {
   return PROC_LABELS[regra] || regra.replace(/_/g, " ");
 }
 
+function nomesProcedimentos(procs) {
+  if (!Array.isArray(procs) || procs.length === 0) return "—";
+  return procs.map((c) => PROC_LABELS[c] || c).join(", ");
+}
+
+const REGRA_TEXTO = {
+  EDA: "Sem periodicidade.",
+  COLONOSCOPIA: "A partir de 45 anos, sem periodicidade.",
+  COLONOSCOPIA_BIOPSIA: "A partir de 45 anos, sem periodicidade.",
+  "10101012": "Sem periodicidade.",
+  EEG_ROTINA: "A partir de 60 anos, sem periodicidade.",
+  POLISSONOGRAFIA: "A partir de 45 anos, sem periodicidade.",
+  VIDEO_LARINGO_RIGIDO: "Sem periodicidade.",
+  VIDEO_LARINGO_RIGIDO_FLEXIVEL: "Sem periodicidade.",
+  PLETISMOGRAFIA: "A partir de 45 anos, sem periodicidade.",
+  LABORATORIO: "Sem periodicidade.",
+  ELETRONEUROMIOGRAFIA: "A partir de 60 anos, sem periodicidade.",
+};
+
 function formatarDataHora(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -294,11 +313,12 @@ export default function Regulacoes({ tema, cores }) {
       ["", "", "", "Total de procedimentos", totalProc],
       ["", "", "", "Média por guia", media],
       [],
-      ["Nº da Guia", "Qtd. Procedimentos", "Data de Execução", "Regra Aplicada"],
+      ["Nº da Guia", "Procedimentos", "Qtd. Procedimentos", "Regra Aplicada", "Data de Execução"],
       ...filtrados.map((r) => [
         r.numero_guia || "—",
+        nomesProcedimentos(r.procedimentos),
         r.procedimentos?.length ?? 0,
-        formatarRegra(r.regra_aplicada),
+        REGRA_TEXTO[r.regra_aplicada] || "—",
         formatarDataHora(r.data_execucao),
       ]),
     ]);
@@ -427,6 +447,7 @@ export default function Regulacoes({ tema, cores }) {
             <thead>
               <tr>
                 <th style={{ color: cores.texto }}>Nº da Guia</th>
+                <th style={{ color: cores.texto }}>Procedimentos</th>
                 <th style={{ color: cores.texto }}>Qtd. Procedimentos</th>
                 <th style={{ color: cores.texto }}>Regra Aplicada</th>
                 <th style={{ color: cores.texto }}>Data de Execução</th>
@@ -434,14 +455,21 @@ export default function Regulacoes({ tema, cores }) {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={4} style={{ color: cores.texto, padding: 32 }}>Carregando...</td></tr>
+                <tr><td colSpan={5} style={{ color: cores.texto, padding: 32 }}>Carregando...</td></tr>
               ) : filtrados.length === 0 ? (
-                <tr><td colSpan={4} style={{ color: cores.texto, padding: 32 }}>Nenhum registro encontrado.</td></tr>
+                <tr><td colSpan={5} style={{ color: cores.texto, padding: 32 }}>Nenhum registro encontrado.</td></tr>
               ) : paginaDados.map((r, i) => (
                 <tr key={i}>
                   <td style={{ color: cores.texto }}>{r.numero_guia || "—"}</td>
+                  <td style={{ color: cores.texto }}>
+                    {Array.isArray(r.procedimentos) && r.procedimentos.length > 0
+                      ? r.procedimentos.map((c, idx) => (
+                          <div key={idx}>{PROC_LABELS[c] || c}</div>
+                        ))
+                      : "—"}
+                  </td>
                   <td style={{ color: cores.texto }}>{r.procedimentos?.length ?? 0}</td>
-                  <td style={{ color: cores.texto }}>{formatarRegra(r.regra_aplicada)}</td>
+                  <td style={{ color: cores.texto }}>{REGRA_TEXTO[r.regra_aplicada] || "—"}</td>
                   <td style={{ color: cores.texto }}>{formatarDataHora(r.data_execucao)}</td>
                 </tr>
               ))}
