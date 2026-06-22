@@ -308,6 +308,7 @@ export default function Regulacoes({ tema, cores }) {
   useEffect(() => { setPagina(1); }, [busca, dataInicio, dataFim, regraFiltro]);
 
   function exportarExcel() {
+    const media = filtrados.length > 0 ? (totalProc / filtrados.length).toFixed(1) : 0;
     const ws = XLSX.utils.aoa_to_sheet([
       ["", "", "", "Total de guias", filtrados.length],
       ["", "", "", "Total de procedimentos", totalProc],
