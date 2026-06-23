@@ -14,7 +14,7 @@ const PROC_LABELS = {
   "40103170": "EEG DE ROTINA",
   "10101012": "CONSULTA ELETIVA",
   "40103536": "POLISSONOGRAMA COM EEG DE NOITE INTEIRA",
-  "90230018": "IDEO-FARINGO-LARINGOSCOPIA COM ENDOSCOPIO RIGIDO",
+  "90230018": "VIDEO-FARINGO-LARINGOSCOPIA COM ENDOSCOPIO RIGIDO",
   "90230030": "VIDEO-FARINGO-LARINGOSCOPIA COM ENDOSCOPIA RIGIDA E FLEXIVEL",
   "90320001": "PLETISMOGRAFIA",
   "40103315": "ELETRONEUROMIOGRAFIA DE MMII",
@@ -47,10 +47,19 @@ const PROC_LABELS = {
   "28050770":  "TESTOSTERONA LIVRE",
 };
 
-function formatarRegra(regra) {
-  if (!regra) return "—";
-  return PROC_LABELS[regra] || regra.replace(/_/g, " ");
-}
+const LAB_CODES = new Set([
+  "28050690","28011376","28010175","28010957","28011414","28011368","28040481",
+  "28010973","28011023","28061624","28010540","28050703","28010507","28011511",
+  "28011392","28011384","28011520","28010493","28050720","28010299","28010795",
+  "40302830","28011449","28010850","28130367","28050770",
+]);
+
+const PROC_OPCOES = [
+  { value: "LABORATORIO", label: "EXAME LABORATORIAL" },
+  ...Object.keys(PROC_LABELS)
+    .filter((c) => !LAB_CODES.has(c))
+    .map((c) => ({ value: c, label: PROC_LABELS[c] })),
+].sort((a, b) => a.label.localeCompare(b.label));
 
 function nomesProcedimentos(procs) {
   if (!Array.isArray(procs) || procs.length === 0) return "—";
@@ -92,10 +101,8 @@ export default function Regulacoes({ tema, cores }) {
   const [busca, setBusca] = useState("");
   const [dataInicio, setDataInicio] = useState(dataHojeBR);
   const [dataFim, setDataFim] = useState("");
-  const [regraFiltro, setRegraFiltro] = useState("");
-  const [regrasUnicas, setRegrasUnicas] = useState([]);
+  const [procFiltro, setProcFiltro] = useState("");
   const [totalGuiasServer, setTotalGuiasServer] = useState(0);
-  const [topProc, setTopProc] = useState([]);
   const [totalPendenteDia, setTotalPendenteDia] = useState(null);
   const [processadasDia, setProcessadasDia] = useState(0);
   const ITENS_POR_PAGINA = 20;
@@ -117,60 +124,20 @@ export default function Regulacoes({ tema, cores }) {
       q = q.gte("data_execucao", inicioDoDiaISO());
     }
     if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
-    if (regraFiltro) q = q.eq("regra_aplicada", regraFiltro);
+    if (procFiltro === "LABORATORIO") q = q.eq("regra_aplicada", "LABORATORIO");
+    else if (procFiltro) q = q.contains("procedimentos", [procFiltro]);
+    q = q.limit(5000);
     if (signal) q = q.abortSignal(signal);
     const { data, error } = await q;
     if (error) return [];
     return data || [];
-  }, [dataInicio, dataFim, regraFiltro]);
+  }, [dataInicio, dataFim, procFiltro]);
 
   const { data: dados, loading } = usePollingFetch(
     fetchRegulacoes,
     120000,
-    [dataInicio, dataFim, regraFiltro]
+    [dataInicio, dataFim, procFiltro]
   );
-
-  useEffect(() => {
-    const KEY = "regulacoes_regras_cache";
-    const cached = localStorage.getItem(KEY);
-    if (cached) {
-      try {
-        const { ts, data } = JSON.parse(cached);
-        if (Date.now() - ts < 24 * 60 * 60 * 1000) {
-          setRegrasUnicas(data);
-          return;
-        }
-      } catch { /* cache inválido, segue para fetch */ }
-    }
-    let ativo = true;
-    (async () => {
-      const { data, error } = await supabase
-        .from("regulacoes")
-        .select("regra_aplicada")
-        .not("regra_aplicada", "is", null)
-        .limit(5000);
-      if (!ativo || error) return;
-      const unicas = [...new Set((data || []).map((r) => r.regra_aplicada).filter(Boolean))].sort();
-      setRegrasUnicas(unicas);
-      localStorage.setItem(KEY, JSON.stringify({ ts: Date.now(), data: unicas }));
-    })();
-    return () => { ativo = false; };
-  }, []);
-
-  useEffect(() => {
-    let ativo = true;
-    (async () => {
-      const { data, error } = await supabase.rpc("regulacoes_top_procedimentos", {
-        d_inicio: dataInicio || null,
-        d_fim: dataFim ? dataFim + "T23:59:59" : null,
-        regra: regraFiltro || null,
-        limite: 1000,
-      });
-      if (!ativo || error) return;
-      setTopProc(data || []);
-    })();
-    return () => { ativo = false; };
-  }, [dataInicio, dataFim, regraFiltro]);
 
   useEffect(() => {
     let ativo = true;
@@ -178,12 +145,13 @@ export default function Regulacoes({ tema, cores }) {
       let q = supabase.from("regulacoes").select("*", { count: "exact", head: true });
       if (dataInicio) q = q.gte("data_execucao", dataInicio);
       if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
-      if (regraFiltro) q = q.eq("regra_aplicada", regraFiltro);
+      if (procFiltro === "LABORATORIO") q = q.eq("regra_aplicada", "LABORATORIO");
+      else if (procFiltro) q = q.contains("procedimentos", [procFiltro]);
       const { count } = await q;
       if (ativo) setTotalGuiasServer(count || 0);
     })();
     return () => { ativo = false; };
-  }, [dataInicio, dataFim, regraFiltro]);
+  }, [dataInicio, dataFim, procFiltro]);
 
   // Total pendente congelado do início do dia selecionado (fila GEPRO)
   useEffect(() => {
@@ -223,6 +191,21 @@ export default function Regulacoes({ tema, cores }) {
   }
 
   const totalGuias = totalGuiasServer;
+
+  // Contagem de procedimentos derivada dos dados carregados (respeita o filtro de procedimento)
+  const topProc = (() => {
+    const contagem = new Map();
+    for (const r of dados) {
+      if (!Array.isArray(r.procedimentos)) continue;
+      for (const codigo of r.procedimentos) {
+        if (!codigo) continue;
+        contagem.set(codigo, (contagem.get(codigo) || 0) + 1);
+      }
+    }
+    return [...contagem.entries()]
+      .map(([codigo, qtd]) => ({ codigo, qtd }))
+      .sort((a, b) => b.qtd - a.qtd);
+  })();
   const totalProc = topProc.reduce((acc, p) => acc + Number(p.qtd || 0), 0);
 
   // Média de tempo entre guias consecutivas — gaps > 10 min excluídos (automação pausada)
@@ -305,7 +288,7 @@ export default function Regulacoes({ tema, cores }) {
     setPagina(Math.min(Math.max(1, p), totalPaginas));
   }
 
-  useEffect(() => { setPagina(1); }, [busca, dataInicio, dataFim, regraFiltro]);
+  useEffect(() => { setPagina(1); }, [busca, dataInicio, dataFim, procFiltro]);
 
   function exportarExcel() {
     const media = filtrados.length > 0 ? (totalProc / filtrados.length).toFixed(1) : 0;
@@ -397,15 +380,15 @@ export default function Regulacoes({ tema, cores }) {
             />
           </div>
           <div className="grupo-filtro">
-            <label>Regra:</label>
+            <label>Procedimento:</label>
             <select
               className="filtro-processo"
-              value={regraFiltro}
-              onChange={(e) => setRegraFiltro(e.target.value)}
+              value={procFiltro}
+              onChange={(e) => setProcFiltro(e.target.value)}
             >
-              <option value="">Todas</option>
-              {regrasUnicas.map((r) => (
-                <option key={r} value={r}>{formatarRegra(r)}</option>
+              <option value="">Todos</option>
+              {PROC_OPCOES.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
           </div>
@@ -427,7 +410,7 @@ export default function Regulacoes({ tema, cores }) {
           </div>
           <button
             className="btn-tema"
-            onClick={() => { setBusca(""); setDataInicio(""); setDataFim(""); setRegraFiltro(""); }}
+            onClick={() => { setBusca(""); setDataInicio(""); setDataFim(""); setProcFiltro(""); }}
           >
             <span className="material-symbols-outlined">mop</span>
             Limpar Filtros
