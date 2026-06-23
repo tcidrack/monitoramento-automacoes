@@ -67,7 +67,7 @@ const REGRA_TEXTO = {
   VIDEO_LARINGO_RIGIDO: "Sem periodicidade.",
   VIDEO_LARINGO_RIGIDO_FLEXIVEL: "Sem periodicidade.",
   PLETISMOGRAFIA: "A partir de 45 anos, sem periodicidade.",
-  LABORATORIO: "Sem periodicidade.",
+  LABORATORIO: "Sem regra especifica.",
   ELETRONEUROMIOGRAFIA: "A partir de 60 anos, sem periodicidade.",
 };
 
