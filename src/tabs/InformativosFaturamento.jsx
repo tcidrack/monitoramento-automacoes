@@ -23,42 +23,74 @@ export default function InformativosFaturamento({ tema, cores }) {
   const [dataFim, setDataFim] = useState("");
   const [filtroCliente, setFiltroCliente] = useState("");
   const [filtroPrestador, setFiltroPrestador] = useState("");
+  const [filtroTipo, setFiltroTipo] = useState("");
   const ITENS_POR_PAGINA = 20;
   const [pagina, setPagina] = useState(1);
 
   const [clientes, setClientes] = useState([]);
   const [prestadores, setPrestadores] = useState([]);
+  const [totais, setTotais] = useState({ total: 0, faturamento: 0, recurso: 0 });
 
   const accentColor = tema === "escuro" ? "#FFCB05" : "#FF0073";
 
   const fetchInformativos = useCallback(async (signal) => {
     let q = supabase
-      .from("informativos_faturamento")
-      .select("id, cliente, prestador, cnpj, numero_lote, nup, mes_faturamento, arquivo, created_at")
+      .from("informativos")
+      .select("id, cliente, prestador, cnpj, numero_lote, nup, arquivo, tipo, created_at")
       .order("created_at", { ascending: false });
     if (dataInicio) q = q.gte("created_at", dataInicio);
     if (dataFim) q = q.lte("created_at", dataFim + "T23:59:59");
     if (filtroCliente) q = q.eq("cliente", filtroCliente);
     if (filtroPrestador) q = q.eq("prestador", filtroPrestador);
+    if (filtroTipo) q = q.eq("tipo", filtroTipo);
+    q = q.limit(5000);
     if (signal) q = q.abortSignal(signal);
     const { data, error } = await q;
     if (error) return [];
     return data || [];
-  }, [dataInicio, dataFim, filtroCliente, filtroPrestador]);
+  }, [dataInicio, dataFim, filtroCliente, filtroPrestador, filtroTipo]);
 
   const { data: dados, loading } = usePollingFetch(
     fetchInformativos,
     120000,
-    [dataInicio, dataFim, filtroCliente, filtroPrestador]
+    [dataInicio, dataFim, filtroCliente, filtroPrestador, filtroTipo]
   );
+
+  // Contagens no servidor para os cards (respeitam os filtros ativos)
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      function buildQ(tipo) {
+        let q = supabase.from("informativos").select("*", { count: "exact", head: true });
+        if (dataInicio) q = q.gte("created_at", dataInicio);
+        if (dataFim) q = q.lte("created_at", dataFim + "T23:59:59");
+        if (filtroCliente) q = q.eq("cliente", filtroCliente);
+        if (filtroPrestador) q = q.eq("prestador", filtroPrestador);
+        if (tipo) q = q.eq("tipo", tipo);
+        return q;
+      }
+      const [totalRes, fatRes, recRes] = await Promise.all([
+        buildQ(filtroTipo || null),
+        buildQ("faturamento"),
+        buildQ("recurso"),
+      ]);
+      if (!ativo) return;
+      setTotais({
+        total: totalRes.count ?? 0,
+        faturamento: fatRes.count ?? 0,
+        recurso: recRes.count ?? 0,
+      });
+    })();
+    return () => { ativo = false; };
+  }, [dataInicio, dataFim, filtroCliente, filtroPrestador, filtroTipo]);
 
   // Valores únicos para os dropdowns de Cliente e Prestador
   useEffect(() => {
     let ativo = true;
     (async () => {
       const [cliRes, presRes] = await Promise.all([
-        supabase.from("informativos_faturamento").select("cliente").not("cliente", "is", null).limit(5000),
-        supabase.from("informativos_faturamento").select("prestador").not("prestador", "is", null).limit(5000),
+        supabase.from("informativos").select("cliente").not("cliente", "is", null).limit(5000),
+        supabase.from("informativos").select("prestador").not("prestador", "is", null).limit(5000),
       ]);
       if (!ativo) return;
       setClientes([...new Set((cliRes.data || []).map((r) => r.cliente))].sort());
@@ -77,7 +109,6 @@ export default function InformativosFaturamento({ tema, cores }) {
     );
   }
 
-  const totalProcessados = dados.length;
   const lotesDistintos = new Set(dados.map((r) => r.numero_lote).filter(Boolean)).size;
   const nupsDistintos = new Set(dados.map((r) => r.nup).filter(Boolean)).size;
 
@@ -102,29 +133,29 @@ export default function InformativosFaturamento({ tema, cores }) {
     setPagina(Math.min(Math.max(1, p), totalPaginas));
   }
 
-  useEffect(() => { setPagina(1); }, [busca, dataInicio, dataFim, filtroCliente, filtroPrestador]);
+  useEffect(() => { setPagina(1); }, [busca, dataInicio, dataFim, filtroCliente, filtroPrestador, filtroTipo]);
 
   function exportarExcel() {
     const ws = XLSX.utils.aoa_to_sheet([
-      ["", "", "Total de informativos processados", totalProcessados],
+      ["", "", "Total de informativos processados", filtrados.length],
       ["", "", "Lotes", lotesDistintos],
       ["", "", "NUPs", nupsDistintos],
       [],
-      ["Cliente", "Prestador", "CNPJ", "Nº Lote", "NUP", "Mês Faturamento", "Arquivo", "Data"],
+      ["Cliente", "Prestador", "CNPJ", "Nº Lote", "NUP", "Tipo", "Arquivo", "Data"],
       ...filtrados.map((r) => [
         r.cliente,
         r.prestador,
         r.cnpj,
         r.numero_lote,
         r.nup,
-        r.mes_faturamento,
+        r.tipo === "recurso" ? "Recurso" : "Faturamento",
         r.arquivo,
         formatarDataHora(r.created_at),
       ]),
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Informativos");
-    XLSX.writeFile(wb, "informativos_faturamento.xlsx");
+    XLSX.writeFile(wb, "informativos.xlsx");
   }
 
   return (
@@ -133,18 +164,18 @@ export default function InformativosFaturamento({ tema, cores }) {
       <div className="cards">
         <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: "pointer" }}>
           <h3>Total Processados</h3>
-          <p>{totalProcessados.toLocaleString("pt-BR")}</p>
+          <p>{totais.total.toLocaleString("pt-BR")}</p>
           <p style={{ fontSize: 13, fontWeight: 400 }}>no período filtrado</p>
         </div>
         <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: "pointer" }}>
-          <h3>Lotes</h3>
-          <p>{lotesDistintos.toLocaleString("pt-BR")}</p>
-          <p style={{ fontSize: 13, fontWeight: 400 }}>números de lote</p>
+          <h3>Faturamentos</h3>
+          <p>{totais.faturamento.toLocaleString("pt-BR")}</p>
+          <p style={{ fontSize: 13, fontWeight: 400 }}>tipo faturamento</p>
         </div>
         <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: "pointer" }}>
-          <h3>NUPs</h3>
-          <p>{nupsDistintos.toLocaleString("pt-BR")}</p>
-          <p style={{ fontSize: 13, fontWeight: 400 }}>NUPs</p>
+          <h3>Recursos</h3>
+          <p>{totais.recurso.toLocaleString("pt-BR")}</p>
+          <p style={{ fontSize: 13, fontWeight: 400 }}>tipo recurso</p>
         </div>
       </div>
 
@@ -178,6 +209,18 @@ export default function InformativosFaturamento({ tema, cores }) {
             </select>
           </div>
           <div className="grupo-filtro">
+            <label>Tipo:</label>
+            <select
+              className="filtro-processo"
+              value={filtroTipo}
+              onChange={(e) => setFiltroTipo(e.target.value)}
+            >
+              <option value="">Todos</option>
+              <option value="faturamento">Faturamento</option>
+              <option value="recurso">Recurso</option>
+            </select>
+          </div>
+          <div className="grupo-filtro">
             <label>Buscar:</label>
             <input
               className="filtro-processo"
@@ -195,7 +238,7 @@ export default function InformativosFaturamento({ tema, cores }) {
           </div>
           <button
             className="btn-tema"
-            onClick={() => { setBusca(""); setDataInicio(""); setDataFim(""); setFiltroCliente(""); setFiltroPrestador(""); }}
+            onClick={() => { setBusca(""); setDataInicio(""); setDataFim(""); setFiltroCliente(""); setFiltroPrestador(""); setFiltroTipo(""); }}
           >
             <span className="material-symbols-outlined">mop</span>
             Limpar Filtros
@@ -220,7 +263,7 @@ export default function InformativosFaturamento({ tema, cores }) {
                 <th style={{ color: cores.texto }}>CNPJ</th>
                 <th style={{ color: cores.texto }}>Nº Lote</th>
                 <th style={{ color: cores.texto }}>NUP</th>
-                <th style={{ color: cores.texto }}>Mês Faturamento</th>
+                <th style={{ color: cores.texto }}>Tipo</th>
                 <th style={{ color: cores.texto }}>Arquivo</th>
                 <th style={{ color: cores.texto }}>Data</th>
               </tr>
@@ -237,7 +280,7 @@ export default function InformativosFaturamento({ tema, cores }) {
                   <td style={{ color: cores.texto }}>{r.cnpj || "—"}</td>
                   <td style={{ color: cores.texto }}>{r.numero_lote || "—"}</td>
                   <td style={{ color: cores.texto }}>{r.nup || "—"}</td>
-                  <td style={{ color: cores.texto }}>{r.mes_faturamento || "—"}</td>
+                  <td style={{ color: cores.texto }}>{r.tipo === "recurso" ? "Recurso" : "Faturamento"}</td>
                   <td style={{ color: cores.texto }}>{r.arquivo || "—"}</td>
                   <td style={{ color: cores.texto }}>{formatarDataHora(r.created_at)}</td>
                 </tr>
