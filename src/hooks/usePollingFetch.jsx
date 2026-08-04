@@ -15,7 +15,10 @@ export function usePollingFetch(fetchFn, intervalMs = 120000, deps = []) {
   }, [fetchFn]);
 
   const fetchData = useCallback(async (isBackground = false) => {
-    if (inFlightRef.current) return;
+    // Polls de fundo não se sobrepõem; fetches explícitos (mount/filtros)
+    // sempre disparam, abortando o anterior — senão a lista fica presa em
+    // "Carregando..." quando um fetch em voo é abortado pelo cleanup do effect.
+    if (inFlightRef.current && isBackground) return;
     inFlightRef.current = true;
 
     if (abortRef.current) abortRef.current.abort();
@@ -31,7 +34,9 @@ export function usePollingFetch(fetchFn, intervalMs = 120000, deps = []) {
     } catch (error) {
       if (error?.name !== "AbortError") console.error("Erro ao buscar dados:", error);
     } finally {
-      inFlightRef.current = false;
+      // só o fetch mais recente libera o flag — um fetch abortado não pode
+      // derrubar o flag de um novo que já esteja em voo
+      if (abortRef.current === controller) inFlightRef.current = false;
       if (!controller.signal.aborted) {
         setLoading(false);
         setUpdating(false);
