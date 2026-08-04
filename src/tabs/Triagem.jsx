@@ -1,8 +1,13 @@
 import { useState, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "../lib/supabase";
+import { buscarPaginado } from "../lib/supabaseFetch";
 import { dataHojeBR, formatarDuracao } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
+
+// 17.108 linhas na tabela inteira, pico de 9.529 num mês (jul/2026) — 12.000
+// cobre o mês mais pesado com folga.
+const MAX_LINHAS = 12000;
 
 function formatarDataHora(iso) {
   if (!iso) return "—";
@@ -46,18 +51,22 @@ export default function Triagem({ tema, cores }) {
   const COLOR_SEM = tema === "escuro" ? "#f87171" : "#dc2626";
 
   const fetchGuias = useCallback(async (signal) => {
-    let q = supabase
-      .from("verificacao_anexos")
-      .select("id, numero_guia, tem_anexo, resultado, data_execucao")
-      .order("data_execucao", { ascending: false });
-    if (dataInicio) {
-      q = q.gte("data_execucao", dataInicio);
-    }
-    if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
-    if (signal) q = q.abortSignal(signal);
-    const { data, error } = await q;
-    if (error) return [];
-    return data || [];
+    // id como critério de desempate: sem ordem total, duas linhas de mesmo
+    // instante poderiam pular ou repetir entre as páginas do .range().
+    const montarQuery = () => {
+      let q = supabase
+        .from("verificacao_anexos")
+        .select("id, numero_guia, tem_anexo, resultado, data_execucao")
+        .order("data_execucao", { ascending: false })
+        .order("id", { ascending: false });
+      if (dataInicio) {
+        q = q.gte("data_execucao", dataInicio);
+      }
+      if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+      if (signal) q = q.abortSignal(signal);
+      return q;
+    };
+    return buscarPaginado(montarQuery, MAX_LINHAS);
   }, [dataInicio, dataFim]);
 
   const { data: dados, loading } = usePollingFetch(

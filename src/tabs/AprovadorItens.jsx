@@ -2,8 +2,12 @@ import { useState, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
+import { buscarPaginado } from "../lib/supabaseFetch";
 import { dataHojeBR, formatarDuracao } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
+
+// 3.704 linhas na tabela inteira — 5.000 cobre tudo que existe, nunca trunca.
+const MAX_LINHAS = 5000;
 
 function formatarDataHora(iso) {
   if (!iso) return "—";
@@ -41,25 +45,29 @@ export default function AprovadorItens({ tema, cores }) {
   const COLOR_ERRO = tema === "escuro" ? "#ff0000" : "#dc2626";
 
   const fetchAprovador = useCallback(async (signal) => {
-    let q = supabase
-      .from("aprovador_itens")
-      .select("id, cliente, prestador, numero_lote, qtd_itens_aprovados, qtd_itens_glosados, qtd_itens_erro, tempo_gasto_minutos, tempo_gasto_segundos, created_at")
-      .order("created_at", { ascending: false });
-    if (dataInicio) {
-      q = q.gte("created_at", dataInicio);
-    } else if (!dataFim) {
-      q = q.gte("created_at", inicioDoDiaISO());
-    }
-    if (dataFim) q = q.lte("created_at", dataFim + "T23:59:59");
-    if (buscaPrestador) q = q.eq("prestador", buscaPrestador);
-    if (buscaCliente) q = q.eq("cliente", buscaCliente);
-    if (filtroStatus === "Aprovados") q = q.gt("qtd_itens_aprovados", 0);
-    else if (filtroStatus === "Glosados") q = q.gt("qtd_itens_glosados", 0);
-    else if (filtroStatus === "Erro do sistema") q = q.gt("qtd_itens_erro", 0);
-    if (signal) q = q.abortSignal(signal);
-    const { data, error } = await q;
-    if (error) return [];
-    return data || [];
+    // id como critério de desempate: sem ordem total, duas linhas de mesmo
+    // instante poderiam pular ou repetir entre as páginas do .range().
+    const montarQuery = () => {
+      let q = supabase
+        .from("aprovador_itens")
+        .select("id, cliente, prestador, numero_lote, qtd_itens_aprovados, qtd_itens_glosados, qtd_itens_erro, tempo_gasto_minutos, tempo_gasto_segundos, created_at")
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false });
+      if (dataInicio) {
+        q = q.gte("created_at", dataInicio);
+      } else if (!dataFim) {
+        q = q.gte("created_at", inicioDoDiaISO());
+      }
+      if (dataFim) q = q.lte("created_at", dataFim + "T23:59:59");
+      if (buscaPrestador) q = q.eq("prestador", buscaPrestador);
+      if (buscaCliente) q = q.eq("cliente", buscaCliente);
+      if (filtroStatus === "Aprovados") q = q.gt("qtd_itens_aprovados", 0);
+      else if (filtroStatus === "Glosados") q = q.gt("qtd_itens_glosados", 0);
+      else if (filtroStatus === "Erro do sistema") q = q.gt("qtd_itens_erro", 0);
+      if (signal) q = q.abortSignal(signal);
+      return q;
+    };
+    return buscarPaginado(montarQuery, MAX_LINHAS);
   }, [dataInicio, dataFim, buscaPrestador, buscaCliente, filtroStatus]);
 
   const { data: dados, loading } = usePollingFetch(

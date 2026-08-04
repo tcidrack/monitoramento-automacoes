@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
+import { buscarPaginado } from "../lib/supabaseFetch";
 import { dataHojeBR, formatarDuracao } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
 
@@ -122,6 +123,9 @@ function inicioDoDiaISO() {
   return d.toISOString();
 }
 
+// 7.689 linhas na tabela inteira, pico de 3.332 num mês — 5.000 dá folga.
+const MAX_LINHAS = 5000;
+
 export default function Regulacoes({ tema, cores }) {
   const [busca, setBusca] = useState("");
   const [dataInicio, setDataInicio] = useState(dataHojeBR);
@@ -141,25 +145,29 @@ export default function Regulacoes({ tema, cores }) {
   const accentColor = tema === "escuro" ? "#FFCB05" : "#FF0073";
 
   const fetchRegulacoes = useCallback(async (signal) => {
-    let q = supabase
-      .from("regulacoes")
-      .select("id, numero_guia, procedimentos, regra_aplicada, status, data_execucao")
-      .order("data_execucao", { ascending: false });
-    if (dataInicio) {
-      q = q.gte("data_execucao", dataInicio);
-    } else if (!dataFim) {
-      q = q.gte("data_execucao", inicioDoDiaISO());
-    }
-    if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
-    // ilike, não eq: numa parcial a regra pode vir composta ("EDA+LABORATORIO")
-    if (procFiltro === "LABORATORIO") q = q.ilike("regra_aplicada", "%LABORATORIO%");
-    else if (procFiltro) q = q.contains("procedimentos", [procFiltro]);
-    if (statusFiltro) q = q.eq("status", statusFiltro);
-    q = q.limit(5000);
-    if (signal) q = q.abortSignal(signal);
-    const { data, error } = await q;
-    if (error) return [];
-    return data || [];
+    // id como critério de desempate: sem ordem total, duas linhas de mesmo
+    // instante poderiam pular ou repetir entre as páginas do .range().
+    const montarQuery = () => {
+      let q = supabase
+        .from("regulacoes")
+        .select("id, numero_guia, procedimentos, regra_aplicada, status, data_execucao")
+        .order("data_execucao", { ascending: false })
+        .order("id", { ascending: false });
+      if (dataInicio) {
+        q = q.gte("data_execucao", dataInicio);
+      } else if (!dataFim) {
+        q = q.gte("data_execucao", inicioDoDiaISO());
+      }
+      if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+      // ilike, não eq: numa parcial a regra pode vir composta ("EDA+LABORATORIO")
+      if (procFiltro === "LABORATORIO") q = q.ilike("regra_aplicada", "%LABORATORIO%");
+      else if (procFiltro) q = q.contains("procedimentos", [procFiltro]);
+      if (statusFiltro) q = q.eq("status", statusFiltro);
+      if (signal) q = q.abortSignal(signal);
+      return q;
+    };
+
+    return buscarPaginado(montarQuery, MAX_LINHAS);
   }, [dataInicio, dataFim, procFiltro, statusFiltro]);
 
   const { data: dados, loading } = usePollingFetch(
