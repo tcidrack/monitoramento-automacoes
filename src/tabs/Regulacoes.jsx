@@ -46,15 +46,28 @@ const PROC_LABELS = {
   "28130367":  "ROTINA DE URINA (SUMARIO DE URINA)",
   "28050770":  "TESTOSTERONA LIVRE",
   "40103528":  "POLISSONOGRAFIA DE NOITE INTEIRA (PSG) (INCLUI POLISSONOGRAMAS)",
-  "28011678":  "APOLIPOPROTEINA A OU B E OUTROS"
+  "28011678":  "APOLIPOPROTEINA A OU B E OUTROS",
+  "28030141":  "PARASITOLOGICO DE FEZES (PPF UNITARIO)",
+  "28050231":  "DEHIDROTESTOSTERONA"
 };
 
+// Espelha GRUPO_LABORATORIO_COMPLETO do robô: esses códigos são agrupados no filtro
+// como "EXAME LABORATORIAL" em vez de aparecerem um a um.
 const LAB_CODES = new Set([
   "28050690","28011376","28010175","28010957","28011414","28011368","28040481",
   "28010973","28011023","28061624","28010540","28050703","28010507","28011511",
   "28011392","28011384","28011520","28010493","28050720","28010299","28010795",
-  "40302830","28011449","28010850","28130367","28050770",
+  "40302830","28011449","28010850","28130367","28050770","28011678",
+  "28030141","28050231",
 ]);
+
+const STATUS_REGULADA = "regulada";
+const STATUS_PARCIAL = "parcialmente regulada";
+
+const STATUS_LABEL = {
+  [STATUS_REGULADA]: "Regulada",
+  [STATUS_PARCIAL]: "Parcialmente regulada",
+};
 
 const PROC_OPCOES = [
   { value: "LABORATORIO", label: "EXAME LABORATORIAL" },
@@ -82,6 +95,16 @@ const REGRA_TEXTO = {
   ELETRONEUROMIOGRAFIA: "A partir de 60 anos, sem periodicidade.",
 };
 
+// Numa autorização parcial que casa mais de uma família de regra, o robô grava os nomes
+// unidos por "+" (ex.: "EDA+LABORATORIO") — buscar a string inteira no mapa não acha nada.
+function textoRegra(regra) {
+  if (!regra) return "—";
+  const textos = [...new Set(
+    regra.split("+").map((r) => REGRA_TEXTO[r.trim()]).filter(Boolean)
+  )];
+  return textos.length > 0 ? textos.join(" ") : "—";
+}
+
 function formatarDataHora(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -104,7 +127,9 @@ export default function Regulacoes({ tema, cores }) {
   const [dataInicio, setDataInicio] = useState(dataHojeBR);
   const [dataFim, setDataFim] = useState("");
   const [procFiltro, setProcFiltro] = useState("");
+  const [statusFiltro, setStatusFiltro] = useState("");
   const [totalGuiasServer, setTotalGuiasServer] = useState(0);
+  const [totalParciais, setTotalParciais] = useState(0);
   const [totalPendenteDia, setTotalPendenteDia] = useState(null);
   const [processadasDia, setProcessadasDia] = useState(0);
   const ITENS_POR_PAGINA = 20;
@@ -118,7 +143,7 @@ export default function Regulacoes({ tema, cores }) {
   const fetchRegulacoes = useCallback(async (signal) => {
     let q = supabase
       .from("regulacoes")
-      .select("id, numero_guia, procedimentos, regra_aplicada, data_execucao")
+      .select("id, numero_guia, procedimentos, regra_aplicada, status, data_execucao")
       .order("data_execucao", { ascending: false });
     if (dataInicio) {
       q = q.gte("data_execucao", dataInicio);
@@ -126,31 +151,47 @@ export default function Regulacoes({ tema, cores }) {
       q = q.gte("data_execucao", inicioDoDiaISO());
     }
     if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
-    if (procFiltro === "LABORATORIO") q = q.eq("regra_aplicada", "LABORATORIO");
+    // ilike, não eq: numa parcial a regra pode vir composta ("EDA+LABORATORIO")
+    if (procFiltro === "LABORATORIO") q = q.ilike("regra_aplicada", "%LABORATORIO%");
     else if (procFiltro) q = q.contains("procedimentos", [procFiltro]);
+    if (statusFiltro) q = q.eq("status", statusFiltro);
     q = q.limit(5000);
     if (signal) q = q.abortSignal(signal);
     const { data, error } = await q;
     if (error) return [];
     return data || [];
-  }, [dataInicio, dataFim, procFiltro]);
+  }, [dataInicio, dataFim, procFiltro, statusFiltro]);
 
   const { data: dados, loading } = usePollingFetch(
     fetchRegulacoes,
     120000,
-    [dataInicio, dataFim, procFiltro]
+    [dataInicio, dataFim, procFiltro, statusFiltro]
   );
 
+  // Totais por status. O card principal conta só as reguladas de fato: a guia parcial
+  // teve procedimentos autorizados, mas continua na fila esperando o humano.
   useEffect(() => {
     let ativo = true;
     (async () => {
-      let q = supabase.from("regulacoes").select("*", { count: "exact", head: true });
-      if (dataInicio) q = q.gte("data_execucao", dataInicio);
-      if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
-      if (procFiltro === "LABORATORIO") q = q.eq("regra_aplicada", "LABORATORIO");
-      else if (procFiltro) q = q.contains("procedimentos", [procFiltro]);
-      const { count } = await q;
-      if (ativo) setTotalGuiasServer(count || 0);
+      const contar = async (status) => {
+        let q = supabase
+          .from("regulacoes")
+          .select("*", { count: "exact", head: true })
+          .eq("status", status);
+        if (dataInicio) q = q.gte("data_execucao", dataInicio);
+        if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+        if (procFiltro === "LABORATORIO") q = q.ilike("regra_aplicada", "%LABORATORIO%");
+        else if (procFiltro) q = q.contains("procedimentos", [procFiltro]);
+        const { count } = await q;
+        return count || 0;
+      };
+      const [reguladas, parciais] = await Promise.all([
+        contar(STATUS_REGULADA),
+        contar(STATUS_PARCIAL),
+      ]);
+      if (!ativo) return;
+      setTotalGuiasServer(reguladas);
+      setTotalParciais(parciais);
     })();
     return () => { ativo = false; };
   }, [dataInicio, dataFim, procFiltro]);
@@ -171,13 +212,15 @@ export default function Regulacoes({ tema, cores }) {
     return () => { ativo = false; };
   }, [diaSelecionado]);
 
-  // Guias processadas pela automação no dia selecionado
+  // Guias efetivamente reguladas pela automação no dia selecionado. As parciais ficam de
+  // fora: elas seguem pendentes na fila, então contá-las superestimaria a cobertura.
   useEffect(() => {
     let ativo = true;
     (async () => {
       const { count } = await supabase
         .from("regulacoes")
         .select("*", { count: "exact", head: true })
+        .eq("status", STATUS_REGULADA)
         .gte("data_execucao", diaSelecionado)
         .lte("data_execucao", diaSelecionado + "T23:59:59");
       if (ativo) setProcessadasDia(count || 0);
@@ -290,21 +333,25 @@ export default function Regulacoes({ tema, cores }) {
     setPagina(Math.min(Math.max(1, p), totalPaginas));
   }
 
-  useEffect(() => { setPagina(1); }, [busca, dataInicio, dataFim, procFiltro]);
+  useEffect(() => { setPagina(1); }, [busca, dataInicio, dataFim, procFiltro, statusFiltro]);
 
   function exportarExcel() {
     const media = filtrados.length > 0 ? (totalProc / filtrados.length).toFixed(1) : 0;
+    const parciais = filtrados.filter((r) => r.status === STATUS_PARCIAL).length;
     const ws = XLSX.utils.aoa_to_sheet([
       ["", "", "", "Total de guias", filtrados.length],
+      ["", "", "", "Reguladas", filtrados.length - parciais],
+      ["", "", "", "Parcialmente reguladas", parciais],
       ["", "", "", "Total de procedimentos", totalProc],
       ["", "", "", "Média por guia", media],
       [],
-      ["Nº da Guia", "Procedimentos", "Qtd. Procedimentos", "Regra Aplicada", "Data de Execução"],
+      ["Nº da Guia", "Procedimentos", "Qtd. Procedimentos", "Regra Aplicada", "Status", "Data de Execução"],
       ...filtrados.map((r) => [
         r.numero_guia || "—",
         nomesProcedimentos(r.procedimentos),
         r.procedimentos?.length ?? 0,
-        REGRA_TEXTO[r.regra_aplicada] || "—",
+        textoRegra(r.regra_aplicada),
+        STATUS_LABEL[r.status] || STATUS_LABEL[STATUS_REGULADA],
         formatarDataHora(r.data_execucao),
       ]),
     ]);
@@ -320,6 +367,11 @@ export default function Regulacoes({ tema, cores }) {
         <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
           <h3>Total de Guias Reguladas</h3>
           <p>{totalGuias.toLocaleString("pt-BR")}</p>
+        </div>
+        <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
+          <h3>Parcialmente Reguladas</h3>
+          <p>{totalParciais.toLocaleString("pt-BR")}</p>
+          <p style={{ fontSize: 13, fontWeight: 400 }}>procedimentos autorizados · guia pendente com o humano</p>
         </div>
         <div className="card animated-card" style={{ backgroundColor: cores.card, color: cores.texto, cursor: 'pointer' }}>
           <h3>Total de Procedimentos</h3>
@@ -395,6 +447,18 @@ export default function Regulacoes({ tema, cores }) {
             </select>
           </div>
           <div className="grupo-filtro">
+            <label>Status:</label>
+            <select
+              className="filtro-processo"
+              value={statusFiltro}
+              onChange={(e) => setStatusFiltro(e.target.value)}
+            >
+              <option value="">Todos</option>
+              <option value={STATUS_REGULADA}>{STATUS_LABEL[STATUS_REGULADA]}</option>
+              <option value={STATUS_PARCIAL}>{STATUS_LABEL[STATUS_PARCIAL]}</option>
+            </select>
+          </div>
+          <div className="grupo-filtro">
             <label>Período:</label>
             <input
               className="filtro-data"
@@ -412,7 +476,7 @@ export default function Regulacoes({ tema, cores }) {
           </div>
           <button
             className="btn-tema"
-            onClick={() => { setBusca(""); setDataInicio(""); setDataFim(""); setProcFiltro(""); }}
+            onClick={() => { setBusca(""); setDataInicio(""); setDataFim(""); setProcFiltro(""); setStatusFiltro(""); }}
           >
             <span className="material-symbols-outlined">mop</span>
             Limpar Filtros
@@ -436,14 +500,15 @@ export default function Regulacoes({ tema, cores }) {
                 <th style={{ color: cores.texto }}>Procedimentos</th>
                 <th style={{ color: cores.texto }}>Qtd. Procedimentos</th>
                 <th style={{ color: cores.texto }}>Regra Aplicada</th>
+                <th style={{ color: cores.texto }}>Status</th>
                 <th style={{ color: cores.texto }}>Data de Execução</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={5} style={{ color: cores.texto, padding: 32 }}>Carregando...</td></tr>
+                <tr><td colSpan={6} style={{ color: cores.texto, padding: 32 }}>Carregando...</td></tr>
               ) : filtrados.length === 0 ? (
-                <tr><td colSpan={5} style={{ color: cores.texto, padding: 32 }}>Nenhum registro encontrado.</td></tr>
+                <tr><td colSpan={6} style={{ color: cores.texto, padding: 32 }}>Nenhum registro encontrado.</td></tr>
               ) : paginaDados.map((r, i) => (
                 <tr key={i}>
                   <td style={{ color: cores.texto }}>{r.numero_guia || "—"}</td>
@@ -455,7 +520,12 @@ export default function Regulacoes({ tema, cores }) {
                       : "—"}
                   </td>
                   <td style={{ color: cores.texto }}>{r.procedimentos?.length ?? 0}</td>
-                  <td style={{ color: cores.texto }}>{REGRA_TEXTO[r.regra_aplicada] || "—"}</td>
+                  <td style={{ color: cores.texto }}>{textoRegra(r.regra_aplicada)}</td>
+                  <td style={{ color: cores.texto }}>
+                    <span className={r.status === STATUS_PARCIAL ? "badge-parcial" : "badge-regulada"}>
+                      {STATUS_LABEL[r.status] || STATUS_LABEL[STATUS_REGULADA]}
+                    </span>
+                  </td>
                   <td style={{ color: cores.texto }}>{formatarDataHora(r.data_execucao)}</td>
                 </tr>
               ))}
