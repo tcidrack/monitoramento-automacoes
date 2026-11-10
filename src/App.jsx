@@ -8,6 +8,7 @@ import ExecucoesTaxasOftalmo from "./tabs/ExecucoesTaxasOftalmo";
 import Triagem from "./tabs/Triagem";
 import InformativosFaturamento from "./tabs/InformativosFaturamento";
 import ExecucoesTaxasBiopsia from "./tabs/ExecucoesTaxasBiopsia";
+import ExecucoesCapaNova from "./tabs/ExecucoesCapaNova";
 
 function Loader({ cor }) {
   return (
@@ -36,6 +37,7 @@ const ABAS = [
   { path: "triagem", label: "Triagem", icon: "attach_file" },
   { path: "informativos", label: "Informativos", icon: "description" },
   { path: "taxas-biopsia", label: "Taxas Biópsia", icon: "biotech" },
+  { path: "capa-nova", label: "Capa Nova", icon: "file_copy" },
 ];
 
 export default function App() {
@@ -113,6 +115,7 @@ export default function App() {
         <Route path="/triagem" element={<Triagem tema={tema} cores={coresAtivas} />} />
         <Route path="/informativos" element={<InformativosFaturamento tema={tema} cores={coresAtivas} />} />
         <Route path="/taxas-biopsia" element={<ExecucoesTaxasBiopsia tema={tema} cores={coresAtivas} />} />
+        <Route path="/capa-nova" element={<ExecucoesCapaNova tema={tema} cores={coresAtivas} />} />
         <Route path="*" element={<Navigate to="/taxas-oftalmo" replace />} />
       </Routes>
     </div>
