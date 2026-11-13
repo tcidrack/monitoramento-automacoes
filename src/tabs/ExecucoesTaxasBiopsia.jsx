@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
 import { buscarPaginado } from "../lib/supabaseFetch";
-import { dataHojeBR } from "../lib/dateUtils";
+import { dataHojeBR, intervaloPolling } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
 
 // Código sem entrada aqui aparece cru no gráfico — o mapa pode crescer depois.
@@ -64,7 +64,7 @@ export default function ExecucoesTaxasBiopsia({ tema, cores }) {
 
   const { data: dados, loading } = usePollingFetch(
     fetchExecucoes,
-    120000,
+    intervaloPolling(dataFim),
     [dataInicio, dataFim]
   );
 

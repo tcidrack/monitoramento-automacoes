@@ -9,6 +9,14 @@ export function dataHojeBR() {
   return BR_DATE_FMT.format(new Date());
 }
 
+// Auto-refresh das abas: 5 min. Devolve 0 (desligado) quando o período escolhido
+// termina antes de hoje — dado histórico não muda, repetir a consulta só gasta banco.
+export const POLLING_MS = 300000;
+
+export function intervaloPolling(dataFim) {
+  return dataFim && dataFim < dataHojeBR() ? 0 : POLLING_MS;
+}
+
 // Formata uma duração em minutos como "Xh Ymin" / "Y min" (null se < 1 min)
 export function formatarDuracao(totalMin) {
   if (totalMin == null || totalMin < 1) return null;

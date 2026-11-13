@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
 import { buscarPaginado } from "../lib/supabaseFetch";
-import { dataHojeBR, formatarDuracao } from "../lib/dateUtils";
+import { dataHojeBR, formatarDuracao, intervaloPolling } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
 
 // 3.704 linhas na tabela inteira — 5.000 cobre tudo que existe, nunca trunca.
@@ -72,7 +72,7 @@ export default function AprovadorItens({ tema, cores }) {
 
   const { data: dados, loading } = usePollingFetch(
     fetchAprovador,
-    120000,
+    intervaloPolling(dataFim),
     [dataInicio, dataFim, buscaPrestador, buscaCliente, filtroStatus]
   );
 
@@ -134,6 +134,8 @@ export default function AprovadorItens({ tema, cores }) {
         .from("aprovador_itens")
         .select("aprov:qtd_itens_aprovados.sum(), glos:qtd_itens_glosados.sum(), erro:qtd_itens_erro.sum(), tmin:tempo_gasto_minutos.sum(), tseg:tempo_gasto_segundos.sum(), nlotes:id.count()");
       if (dataInicio) q = q.gte("created_at", dataInicio);
+      // mesmo padrão da lista: sem período, só hoje
+      else if (!dataFim) q = q.gte("created_at", inicioDoDiaISO());
       if (dataFim) q = q.lte("created_at", dataFim + "T23:59:59");
       if (buscaPrestador) q = q.eq("prestador", buscaPrestador);
       if (buscaCliente) q = q.eq("cliente", buscaCliente);

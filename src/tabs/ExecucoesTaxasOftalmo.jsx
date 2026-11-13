@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
-import { dataHojeBR } from "../lib/dateUtils";
+import { dataHojeBR, intervaloPolling } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
 
 const TAXA_LABELS = {
@@ -61,7 +61,7 @@ export default function ExecucoesTaxasOftalmo({ tema, cores }) {
 
   const { data: dados, loading } = usePollingFetch(
     fetchExecucoes,
-    120000,
+    intervaloPolling(dataFim),
     [dataInicio, dataFim]
   );
 

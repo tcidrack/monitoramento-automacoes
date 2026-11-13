@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
 import { buscarPaginado } from "../lib/supabaseFetch";
-import { dataHojeBR, formatarDuracao } from "../lib/dateUtils";
+import { dataHojeBR, formatarDuracao, intervaloPolling } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
 
 const PROC_LABELS = {
@@ -183,7 +183,7 @@ export default function Regulacoes({ tema, cores }) {
 
   const { data: dados, loading } = usePollingFetch(
     fetchRegulacoes,
-    120000,
+    intervaloPolling(dataFim),
     [dataInicio, dataFim, procFiltro, statusFiltro]
   );
 
@@ -198,6 +198,8 @@ export default function Regulacoes({ tema, cores }) {
           .select("*", { count: "exact", head: true })
           .eq("status", status);
         if (dataInicio) q = q.gte("data_execucao", dataInicio);
+        // mesmo padrão da lista: sem período, só hoje
+        else if (!dataFim) q = q.gte("data_execucao", inicioDoDiaISO());
         if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
         if (procFiltro === "LABORATORIO") q = q.ilike("regra_aplicada", "%LABORATORIO%");
         else if (procFiltro) q = q.contains("procedimentos", [procFiltro]);

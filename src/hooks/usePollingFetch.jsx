@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
-export function usePollingFetch(fetchFn, intervalMs = 120000, deps = []) {
+export function usePollingFetch(fetchFn, intervalMs = 300000, deps = []) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -46,6 +46,9 @@ export function usePollingFetch(fetchFn, intervalMs = 120000, deps = []) {
 
   const startInterval = useCallback(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = null;
+    // intervalMs 0 = sem auto-refresh (período já encerrado)
+    if (!intervalMs) return;
     intervalRef.current = setInterval(() => fetchData(true), intervalMs);
   }, [intervalMs, fetchData]);
 

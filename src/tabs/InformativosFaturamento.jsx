@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "../lib/supabase";
-import { dataHojeBR } from "../lib/dateUtils";
+import { dataHojeBR, intervaloPolling } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
 
 function formatarDataHora(iso) {
@@ -52,7 +52,7 @@ export default function InformativosFaturamento({ tema, cores }) {
 
   const { data: dados, loading } = usePollingFetch(
     fetchInformativos,
-    120000,
+    intervaloPolling(dataFim),
     [dataInicio, dataFim, filtroCliente, filtroPrestador, filtroTipo]
   );
 
@@ -86,15 +86,28 @@ export default function InformativosFaturamento({ tema, cores }) {
 
   // Valores únicos para os dropdowns de Cliente e Prestador
   useEffect(() => {
+    // Cache de 24h: essas duas consultas leem a tabela inteira a cada abertura da aba
+    const KEY = "informativos_dropdowns_cache";
+    try {
+      const c = JSON.parse(localStorage.getItem(KEY) || "null");
+      if (c && Date.now() - c.ts < 24 * 60 * 60 * 1000) {
+        setClientes(c.cli);
+        setPrestadores(c.prest);
+        return;
+      }
+    } catch { /* cache inválido */ }
     let ativo = true;
     (async () => {
       const [cliRes, presRes] = await Promise.all([
         supabase.from("informativos").select("cliente").not("cliente", "is", null).limit(5000),
         supabase.from("informativos").select("prestador").not("prestador", "is", null).limit(5000),
       ]);
-      if (!ativo) return;
-      setClientes([...new Set((cliRes.data || []).map((r) => r.cliente))].sort());
-      setPrestadores([...new Set((presRes.data || []).map((r) => r.prestador))].sort());
+      if (!ativo || cliRes.error || presRes.error) return;
+      const cli = [...new Set((cliRes.data || []).map((r) => r.cliente))].sort();
+      const prest = [...new Set((presRes.data || []).map((r) => r.prestador))].sort();
+      setClientes(cli);
+      setPrestadores(prest);
+      localStorage.setItem(KEY, JSON.stringify({ ts: Date.now(), cli, prest }));
     })();
     return () => { ativo = false; };
   }, []);

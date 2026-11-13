@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
 import { buscarPaginado } from "../lib/supabaseFetch";
-import { dataHojeBR, formatarDuracao } from "../lib/dateUtils";
+import { dataHojeBR, formatarDuracao, intervaloPolling } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
 
 // 1 linha por execução do robô — volume baixo, 5000 cobre com folga.
@@ -88,7 +88,7 @@ export default function ExecucoesCapaNova({ tema, cores }) {
 
   const { data: dados, loading } = usePollingFetch(
     fetchExecucoes,
-    120000,
+    intervaloPolling(dataFim),
     [dataInicio, dataFim]
   );
 
