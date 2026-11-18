@@ -128,10 +128,10 @@ function formatarDataHora(iso) {
   );
 }
 
+// regulacoes.data_execucao é timestamp SEM fuso gravado em hora de Brasília:
+// compara com a data de Brasília crua (toISOString daria 03:00 e cortaria a madrugada).
 function inicioDoDiaISO() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
+  return dataHojeBR();
 }
 
 // 7.689 linhas na tabela inteira, pico de 3.332 num mês — 5.000 dá folga.

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "../lib/supabase";
-import { dataHojeBR, intervaloPolling } from "../lib/dateUtils";
+import { dataHojeBR, intervaloPolling, inicioDiaBR, fimDiaBR } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
 
 function formatarDataHora(iso) {
@@ -38,8 +38,8 @@ export default function InformativosFaturamento({ tema, cores }) {
       .from("informativos")
       .select("id, cliente, prestador, cnpj, numero_lote, nup, arquivo, tipo, created_at")
       .order("created_at", { ascending: false });
-    if (dataInicio) q = q.gte("created_at", dataInicio);
-    if (dataFim) q = q.lte("created_at", dataFim + "T23:59:59");
+    if (dataInicio) q = q.gte("created_at", inicioDiaBR(dataInicio));
+    if (dataFim) q = q.lte("created_at", fimDiaBR(dataFim));
     if (filtroCliente) q = q.eq("cliente", filtroCliente);
     if (filtroPrestador) q = q.eq("prestador", filtroPrestador);
     if (filtroTipo) q = q.eq("tipo", filtroTipo);
@@ -62,8 +62,8 @@ export default function InformativosFaturamento({ tema, cores }) {
     (async () => {
       function buildQ(tipo) {
         let q = supabase.from("informativos").select("*", { count: "exact", head: true });
-        if (dataInicio) q = q.gte("created_at", dataInicio);
-        if (dataFim) q = q.lte("created_at", dataFim + "T23:59:59");
+        if (dataInicio) q = q.gte("created_at", inicioDiaBR(dataInicio));
+        if (dataFim) q = q.lte("created_at", fimDiaBR(dataFim));
         if (filtroCliente) q = q.eq("cliente", filtroCliente);
         if (filtroPrestador) q = q.eq("prestador", filtroPrestador);
         if (tipo) q = q.eq("tipo", tipo);

@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
 import { buscarPaginado } from "../lib/supabaseFetch";
-import { dataHojeBR, formatarDuracao, intervaloPolling } from "../lib/dateUtils";
+import { dataHojeBR, formatarDuracao, intervaloPolling, inicioDiaBR, fimDiaBR } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
 
 // 1 linha por execução do robô — volume baixo, 5000 cobre com folga.
@@ -41,9 +41,7 @@ function formatarDataHora(iso) {
 }
 
 function inicioDoDiaISO() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
+  return inicioDiaBR(dataHojeBR());
 }
 
 function pendencias(r) {
@@ -75,11 +73,11 @@ export default function ExecucoesCapaNova({ tema, cores }) {
         .order("data_execucao", { ascending: false })
         .order("id", { ascending: false });
       if (dataInicio) {
-        q = q.gte("data_execucao", dataInicio);
+        q = q.gte("data_execucao", inicioDiaBR(dataInicio));
       } else if (!dataFim) {
         q = q.gte("data_execucao", inicioDoDiaISO());
       }
-      if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+      if (dataFim) q = q.lte("data_execucao", fimDiaBR(dataFim));
       if (signal) q = q.abortSignal(signal);
       return q;
     };
@@ -103,8 +101,8 @@ export default function ExecucoesCapaNova({ tema, cores }) {
           "divergente:qtd_divergente.sum(), revisar:qtd_revisar.sum(), nao_inserida:qtd_nao_inserida.sum(), " +
           "nao_conferida:qtd_nao_conferida.sum(), duplicada:qtd_duplicada.sum()"
         );
-      if (dataInicio) q = q.gte("data_execucao", dataInicio);
-      if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+      if (dataInicio) q = q.gte("data_execucao", inicioDiaBR(dataInicio));
+      if (dataFim) q = q.lte("data_execucao", fimDiaBR(dataFim));
       const { data, error } = await q;
       if (!ativo || error) return;
       const t = data?.[0] || {};

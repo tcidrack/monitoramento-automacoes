@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
 import { buscarPaginado } from "../lib/supabaseFetch";
-import { dataHojeBR, intervaloPolling } from "../lib/dateUtils";
+import { dataHojeBR, intervaloPolling, inicioDiaBR, fimDiaBR } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
 
 // Código sem entrada aqui aparece cru no gráfico — o mapa pode crescer depois.
@@ -27,9 +27,7 @@ function formatarDataHora(iso) {
 }
 
 function inicioDoDiaISO() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
+  return inicioDiaBR(dataHojeBR());
 }
 
 export default function ExecucoesTaxasBiopsia({ tema, cores }) {
@@ -51,11 +49,11 @@ export default function ExecucoesTaxasBiopsia({ tema, cores }) {
         .order("data_execucao", { ascending: false })
         .order("id", { ascending: false });
       if (dataInicio) {
-        q = q.gte("data_execucao", dataInicio);
+        q = q.gte("data_execucao", inicioDiaBR(dataInicio));
       } else if (!dataFim) {
         q = q.gte("data_execucao", inicioDoDiaISO());
       }
-      if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+      if (dataFim) q = q.lte("data_execucao", fimDiaBR(dataFim));
       if (signal) q = q.abortSignal(signal);
       return q;
     };
@@ -74,8 +72,8 @@ export default function ExecucoesTaxasBiopsia({ tema, cores }) {
       let q = supabase
         .from("execucoes_taxas_biopsia")
         .select("nproc:id.count(), nguias:qtd_guias.sum(), ntaxas:qtd_taxas.sum(), ntaxadas:qtd_guias_taxadas.sum()");
-      if (dataInicio) q = q.gte("data_execucao", dataInicio);
-      if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+      if (dataInicio) q = q.gte("data_execucao", inicioDiaBR(dataInicio));
+      if (dataFim) q = q.lte("data_execucao", fimDiaBR(dataFim));
       const { data, error } = await q;
       if (!ativo || error) return;
       const t = data?.[0] || {};

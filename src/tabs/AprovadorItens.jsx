@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
 import { buscarPaginado } from "../lib/supabaseFetch";
-import { dataHojeBR, formatarDuracao, intervaloPolling } from "../lib/dateUtils";
+import { dataHojeBR, formatarDuracao, intervaloPolling, inicioDiaBR, fimDiaBR } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
 
 // 3.704 linhas na tabela inteira — 5.000 cobre tudo que existe, nunca trunca.
@@ -21,9 +21,7 @@ function formatarDataHora(iso) {
 }
 
 function inicioDoDiaISO() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
+  return inicioDiaBR(dataHojeBR());
 }
 
 export default function AprovadorItens({ tema, cores }) {
@@ -54,11 +52,11 @@ export default function AprovadorItens({ tema, cores }) {
         .order("created_at", { ascending: false })
         .order("id", { ascending: false });
       if (dataInicio) {
-        q = q.gte("created_at", dataInicio);
+        q = q.gte("created_at", inicioDiaBR(dataInicio));
       } else if (!dataFim) {
         q = q.gte("created_at", inicioDoDiaISO());
       }
-      if (dataFim) q = q.lte("created_at", dataFim + "T23:59:59");
+      if (dataFim) q = q.lte("created_at", fimDiaBR(dataFim));
       if (buscaPrestador) q = q.eq("prestador", buscaPrestador);
       if (buscaCliente) q = q.eq("cliente", buscaCliente);
       if (filtroStatus === "Aprovados") q = q.gt("qtd_itens_aprovados", 0);
@@ -133,10 +131,10 @@ export default function AprovadorItens({ tema, cores }) {
       let q = supabase
         .from("aprovador_itens")
         .select("aprov:qtd_itens_aprovados.sum(), glos:qtd_itens_glosados.sum(), erro:qtd_itens_erro.sum(), tmin:tempo_gasto_minutos.sum(), tseg:tempo_gasto_segundos.sum(), nlotes:id.count()");
-      if (dataInicio) q = q.gte("created_at", dataInicio);
+      if (dataInicio) q = q.gte("created_at", inicioDiaBR(dataInicio));
       // mesmo padrão da lista: sem período, só hoje
       else if (!dataFim) q = q.gte("created_at", inicioDoDiaISO());
-      if (dataFim) q = q.lte("created_at", dataFim + "T23:59:59");
+      if (dataFim) q = q.lte("created_at", fimDiaBR(dataFim));
       if (buscaPrestador) q = q.eq("prestador", buscaPrestador);
       if (buscaCliente) q = q.eq("cliente", buscaCliente);
       if (filtroStatus === "Aprovados") q = q.gt("qtd_itens_aprovados", 0);

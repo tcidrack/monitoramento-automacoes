@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
-import { dataHojeBR, intervaloPolling } from "../lib/dateUtils";
+import { dataHojeBR, intervaloPolling, inicioDiaBR, fimDiaBR } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
 
 function formatarDataHora(iso) {
@@ -17,9 +17,7 @@ function formatarDataHora(iso) {
 }
 
 function inicioDoDiaISO() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
+  return inicioDiaBR(dataHojeBR());
 }
 
 export default function ExecucoesRMTC({ tema, cores }) {
@@ -43,11 +41,11 @@ export default function ExecucoesRMTC({ tema, cores }) {
       .select("id, numero_processo, tipo, quantidade_guias, data_execucao")
       .order("data_execucao", { ascending: false });
     if (dataInicio) {
-      q = q.gte("data_execucao", dataInicio);
+      q = q.gte("data_execucao", inicioDiaBR(dataInicio));
     } else if (!dataFim) {
       q = q.gte("data_execucao", inicioDoDiaISO());
     }
-    if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+    if (dataFim) q = q.lte("data_execucao", fimDiaBR(dataFim));
     if (filtroTipo !== "Todos") q = q.eq("tipo", filtroTipo);
     if (signal) q = q.abortSignal(signal);
     const { data, error } = await q;
@@ -68,8 +66,8 @@ export default function ExecucoesRMTC({ tema, cores }) {
         .from("execucoes_rmtc")
         .select("tipo", { count: "exact", head: true })
         .eq("tipo", tipo);
-      if (dataInicio) q = q.gte("data_execucao", dataInicio);
-      if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+      if (dataInicio) q = q.gte("data_execucao", inicioDiaBR(dataInicio));
+      if (dataFim) q = q.lte("data_execucao", fimDiaBR(dataFim));
       return q;
     };
     (async () => {
@@ -85,8 +83,8 @@ export default function ExecucoesRMTC({ tema, cores }) {
     let ativo = true;
     (async () => {
       let q = supabase.from("execucoes_rmtc").select("nguias:quantidade_guias.sum()");
-      if (dataInicio) q = q.gte("data_execucao", dataInicio);
-      if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+      if (dataInicio) q = q.gte("data_execucao", inicioDiaBR(dataInicio));
+      if (dataFim) q = q.lte("data_execucao", fimDiaBR(dataFim));
       if (filtroTipo !== "Todos") q = q.eq("tipo", filtroTipo);
       const { data, error } = await q;
       if (!ativo || error) return;

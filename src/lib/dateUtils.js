@@ -9,6 +9,20 @@ export function dataHojeBR() {
   return BR_DATE_FMT.format(new Date());
 }
 
+// Limites de um dia de Brasília (YYYY-MM-DD) como instante UTC ("...Z"), para
+// filtrar colunas gravadas em UTC — timestamptz ou timestamp sem fuso com hora
+// UTC (abas que exibem com iso + "Z"). Data crua ("2026-11-18") é lida pelo
+// Postgres como meia-noite UTC = 21:00 do dia anterior em Brasília.
+// Brasil sem horário de verão desde 2019 → -03:00 fixo.
+// NÃO usar em colunas que guardam hora de Brasília sem fuso (ex.: regulacoes).
+export function inicioDiaBR(dia) {
+  return new Date(`${dia}T00:00:00-03:00`).toISOString();
+}
+
+export function fimDiaBR(dia) {
+  return new Date(`${dia}T23:59:59.999-03:00`).toISOString();
+}
+
 // Auto-refresh das abas: 5 min. Devolve 0 (desligado) quando o período escolhido
 // termina antes de hoje — dado histórico não muda, repetir a consulta só gasta banco.
 export const POLLING_MS = 300000;

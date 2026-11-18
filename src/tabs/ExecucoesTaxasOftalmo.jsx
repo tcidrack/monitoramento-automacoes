@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
-import { dataHojeBR, intervaloPolling } from "../lib/dateUtils";
+import { dataHojeBR, intervaloPolling, inicioDiaBR, fimDiaBR } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
 
 const TAXA_LABELS = {
@@ -26,9 +26,7 @@ function formatarDataHora(iso) {
 }
 
 function inicioDoDiaISO() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
+  return inicioDiaBR(dataHojeBR());
 }
 
 export default function ExecucoesTaxasOftalmo({ tema, cores }) {
@@ -48,11 +46,11 @@ export default function ExecucoesTaxasOftalmo({ tema, cores }) {
       .select("id, numero_processo, qtd_guias, qtd_taxas, qtd_regra_90262610, codigos_taxas, data_execucao")
       .order("data_execucao", { ascending: false });
     if (dataInicio) {
-      q = q.gte("data_execucao", dataInicio);
+      q = q.gte("data_execucao", inicioDiaBR(dataInicio));
     } else if (!dataFim) {
       q = q.gte("data_execucao", inicioDoDiaISO());
     }
-    if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+    if (dataFim) q = q.lte("data_execucao", fimDiaBR(dataFim));
     if (signal) q = q.abortSignal(signal);
     const { data, error } = await q;
     if (error) return [];
@@ -71,8 +69,8 @@ export default function ExecucoesTaxasOftalmo({ tema, cores }) {
       let q = supabase
         .from("execucoes_taxas_oftalmo")
         .select("nproc:id.count(), nguias:qtd_guias.sum(), ntaxas:qtd_taxas.sum(), nproc90262610:qtd_regra_90262610.sum()");
-      if (dataInicio) q = q.gte("data_execucao", dataInicio);
-      if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+      if (dataInicio) q = q.gte("data_execucao", inicioDiaBR(dataInicio));
+      if (dataFim) q = q.lte("data_execucao", fimDiaBR(dataFim));
       const { data, error } = await q;
       if (!ativo || error) return;
       const t = data?.[0] || {};
@@ -90,8 +88,8 @@ export default function ExecucoesTaxasOftalmo({ tema, cores }) {
     let ativo = true;
     (async () => {
       const { data, error } = await supabase.rpc("taxas_oftalmo_top_taxas", {
-        d_inicio: dataInicio || null,
-        d_fim: dataFim ? dataFim + "T23:59:59" : null,
+        d_inicio: dataInicio ? inicioDiaBR(dataInicio) : null,
+        d_fim: dataFim ? fimDiaBR(dataFim) : null,
         limite: 10,
       });
       if (!ativo || error) return;

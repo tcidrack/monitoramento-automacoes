@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "../lib/supabase";
 import { buscarPaginado } from "../lib/supabaseFetch";
-import { dataHojeBR, formatarDuracao, intervaloPolling } from "../lib/dateUtils";
+import { dataHojeBR, formatarDuracao, intervaloPolling, inicioDiaBR, fimDiaBR } from "../lib/dateUtils";
 import { usePollingFetch } from "../hooks/usePollingFetch";
 
 // 17.108 linhas na tabela inteira, pico de 9.529 num mês (jul/2026) — 12.000
@@ -23,9 +23,7 @@ function formatarDataHora(iso) {
 }
 
 function inicioDoDiaISO() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
+  return inicioDiaBR(dataHojeBR());
 }
 
 const RESULTADO_LABEL = {
@@ -60,13 +58,13 @@ export default function Triagem({ tema, cores }) {
         .order("data_execucao", { ascending: false })
         .order("id", { ascending: false });
       if (dataInicio) {
-        q = q.gte("data_execucao", dataInicio);
+        q = q.gte("data_execucao", inicioDiaBR(dataInicio));
       } else if (!dataFim) {
         // sem período escolhido, mostra só hoje — a tabela inteira são dezenas de
         // milhares de linhas relidas a cada auto-refresh
         q = q.gte("data_execucao", inicioDoDiaISO());
       }
-      if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+      if (dataFim) q = q.lte("data_execucao", fimDiaBR(dataFim));
       if (signal) q = q.abortSignal(signal);
       return q;
     };
@@ -89,11 +87,11 @@ export default function Triagem({ tema, cores }) {
           .from("verificacao_anexos")
           .select("*", { count: "exact", head: true });
         if (dataInicio) {
-          q = q.gte("data_execucao", dataInicio);
+          q = q.gte("data_execucao", inicioDiaBR(dataInicio));
         } else if (!dataFim) {
           q = q.gte("data_execucao", inicioDoDiaISO());
         }
-        if (dataFim) q = q.lte("data_execucao", dataFim + "T23:59:59");
+        if (dataFim) q = q.lte("data_execucao", fimDiaBR(dataFim));
         if (filtroAnexo != null) q = q.eq("tem_anexo", filtroAnexo);
         return q;
       }
@@ -132,8 +130,8 @@ export default function Triagem({ tema, cores }) {
       const { count } = await supabase
         .from("verificacao_anexos")
         .select("*", { count: "exact", head: true })
-        .gte("data_execucao", diaSelecionado)
-        .lte("data_execucao", diaSelecionado + "T23:59:59");
+        .gte("data_execucao", inicioDiaBR(diaSelecionado))
+        .lte("data_execucao", fimDiaBR(diaSelecionado));
       if (ativo) setProcessadasDia(count || 0);
     })();
     return () => { ativo = false; };
